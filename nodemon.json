@@ -1,5 +1,5 @@
 {
-    "watch": ["index.ts"],
-    "exec": "ts-node --project tsconfig.server.json index.ts",
+    "watch": ["nodemon.json", "index.ts", "routes/"],
+    "exec": "ts-node index.ts",
     "ext": "js ts"
-  }
+}
