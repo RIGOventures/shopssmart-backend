@@ -1,21 +1,20 @@
 const router = require('express').Router();
 const { body, param } = require('express-validator');
 
+const { ResultCode } = require('@/utils/result')
+
 // Get error report middleware
-const reportValidationError = require('../utils/report-validation-error');
+const reportValidationError = require('@/utils/report-validation-error');
 
 // Get Redis function
-const { getClient, getKeyName, createRelationalRecord } = require("../database/redis");
+const { getClient, getKeyName, createRelationalRecord, deleteRelationalRecord, getRelationalRecord, getRelationalRecords } = require("@/database/redis");
 
 // Get Redis client
 const redis = getClient();
 
-const { revalidatePath } = require('next/cache')
-const { redirect } = require('next/navigation')
-
 // Create a chat
 router.post(
-    '/chat/',
+    '/chat',
     [
         body().isObject(),
         body('messages').isEmail(),
@@ -50,6 +49,55 @@ router.post(
     }
 );
 
+// Get chats
+router.get(
+    '/chat',
+    [
+        reportValidationError,
+    ],
+    async (req, res) => {
+        const { userId } = req.params;
+
+        const chats = await getRelationalRecords('chats', userId)
+
+        res.status(200).json(chats);
+    }
+);
+
+// TODO: Replace functions
+// const { revalidatePath } = require('next/cache')
+
+// Clear all chats
+router.delete(
+    '/chat',
+    [
+        reportValidationError,
+    ],
+    async (req, res) => {
+        const { userId } = req.params;
+
+        // Remove the foreign key
+        const foreignKey = getKeyName('users', 'chat', userId)
+
+        const chats: string[] = await redis.zrange(foreignKey, 0, -1)
+        if (!chats.length) {
+            res.redirect('/')
+        }
+        const pipeline = redis.pipeline()
+
+        for (const chat of chats) {
+            pipeline.del(chat)
+            pipeline.zrem(foreignKey, chat)
+        }
+
+        await pipeline.exec()
+
+        //revalidatePath('/')
+        res.redirect('/')
+
+    }
+);
+
 // Update a chat
 router.post(
     '/chat/:chatId',
@@ -64,9 +112,8 @@ router.post(
         const { userId } = user;
 
         const { chatId } = req.body;
-        const chatKey = getKeyName('chats', chatId);
 
-        const existingChat = await redis.hgetall(chatKey);
+        const existingChat = await getRelationalRecord('chats', chatId, userId);
 
         // Get messages
         const { messages } = req.body;
@@ -83,71 +130,19 @@ router.post(
     }
 );
 
-// Get chats
-router.get(
-    '/chat/',
-    [
-        body().isObject(),
-        body('userId').isEmail(),
-        reportValidationError,
-    ],
-    async (req, res) => {
-
-        return getRecords<Chat>('chat', userId)
-    }
-);
-
-// Get chats
-router.delete(
-    '/chat/',
-    [
-        body().isObject(),
-        body('userId').isEmail(),
-        reportValidationError,
-    ],
-    async (req, res) => {
-        const session = await auth()
-
-        if (!session?.user?.id) {
-            return {
-                error: 'Unauthorized'
-            }
-        }
-
-        const chats: string[] = await redis.zrange(`user:chat:${session.user.id}`, 0, -1)
-        if (!chats.length) {
-            return redirect('/')
-        }
-        const pipeline = redis.pipeline()
-
-        for (const chat of chats) {
-            pipeline.del(chat)
-            pipeline.zrem(`user:chat:${session.user.id}`, chat)
-        }
-
-        await pipeline.exec()
-
-        revalidatePath('/')
-        return redirect('/')
-    }
-);
-
 // Get a chat by ID
 router.get(
     '/chat/:chatId',
     [
-        param('userId').isString({ min: 1 }),
         param('chatId').isString({ min: 1 }),
         reportValidationError,
     ],
     async (req, res) => {
         const { userId, chatId } = req.params;
-        const userKey = getKeyName('users', userId);
-        const chatKey = getKeyName('chats', chatId);
 
-        const profile = getRecord<Profile>(userKey, profileKey)
-        return getRecord<Chat>('chat', id, userId)
-        res.status(200).json(profile);
+        const chat = getRelationalRecord('chats', chatId, userId)
+
+        res.status(200).json(chat);
     }
 );
 
@@ -155,23 +150,15 @@ router.get(
 router.delete(
     '/chat/:chatId',
     [
-        param('userId').isString({ min: 1 }),
         param('chatId').isString({ min: 1 }),
-        body().isObject(),
-        body('path').isString({ min: 1 }),
         reportValidationError,
     ],
     async (req, res) => {
         const { userId, chatId } = req.params;
-        const userKey = getKeyName('users', userId);
-        const profileKey = getKeyName('profiles', profileId);
 
-        const { path } = req.body;
-        await deleteRecord(userKey, profileKey)
+        await deleteRelationalRecord('chats', chatId, userId)
 
-        res.status(200).json(profile);
-        revalidatePath('/')
-        return revalidatePath(path)
+        res.send("OK");
     }
 );
 
@@ -179,35 +166,23 @@ router.delete(
 router.post(
     '/chat/:chatId/share',
     [
-        param('userId').isString({ min: 1 }),
         param('chatId').isString({ min: 1 }),
         reportValidationError,
     ],
     async (req, res) => {
         const { userId, chatId } = req.params;
 
-        const session = await auth()
-        if (!session?.user?.id) {
-            return {
-                error: 'Unauthorized'
-            }
-        }
-
-        const chat = await redis.hgetall<Chat>(`chat:${id}`)
-        if (!chat || chat.userId !== session.user.id) {
-            return {
-                error: 'Something went wrong'
-            }
-        }
+        const chat = getRelationalRecord('chats', chatId, userId)
 
         const payload = {
             ...chat,
             sharePath: `/share/${chat.id}`
         }
 
-        await redis.hset(`chat:${chat.id}`, payload)
+        const chatKey = getKeyName('chats', chat.id)
+        await redis.hset(chatKey, payload)
 
-        return payload
+        res.status(200).json(payload);
     }
 );
 
@@ -215,18 +190,20 @@ router.post(
 router.post(
     '/chat/:chatId/share',
     [
-        param('userId').isString({ min: 1 }),
         param('chatId').isString({ min: 1 }),
         reportValidationError,
     ],
     async (req, res) => {
-        const { userId, chatId } = req.params;
-        const chat = await kv.hgetall<Chat>(`chat:${id}`)
+        const { chatId } = req.params;
+        const chatKey = getKeyName('chats', chatId)
 
+        const chat = await redis.hgetall(chatKey)
         if (!chat || !chat.sharePath) {
-            return null
+            res.status(400)
         }
 
-        return chat
+        res.status(200).json(chat);
     }
 );
+
+module.exports = router;

@@ -8,7 +8,10 @@ const redis = new Redis({
     port: parseInt(process.env.REDIS_PORT!),
 });
 
-// 
+// Convert a list of indexes to an index key
+const getKeyName = (...args) => `${args.join(':')}`
+
+// Maximum number of search results to return
 const MAX_SEARCH_RESULTS = 1000;
 
 // Search the index with a textual query, returning either documents or just ids
@@ -54,9 +57,6 @@ const performSearch = async (index: string, ...query) => {
         return [];
     }
 };
-  
-// Convert a list of indexes to an index key
-const getKeyName = (...args) => `${args.join(':')}`
 
 // Set a record and link to a user 
 const createRelationalRecord = async (index: string, record: { id: string, userId: string }) => {
@@ -152,8 +152,8 @@ const getRelationalRecords = async (index: string, userId: string) => {
 // Export functions
 module.exports = {
     getClient: () => redis,
-    performSearch,
     getKeyName,
+    performSearch,
     createRelationalRecord,
     deleteRelationalRecord, 
     getRelationalRecord,

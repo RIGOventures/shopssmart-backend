@@ -1,32 +1,32 @@
 const router = require('express').Router();
 const { body, param } = require('express-validator');
 
-const { z } = require('zod')
+const { ResultCode } = require('@/utils/result')
 
 // Get error report middleware
-const reportValidationError = require('../utils/report-validation-error');
+const reportValidationError = require('@/utils/report-validation-error');
 
 // Get Redis function
-const { getClient, getKeyName } = require("../database/redis");
+const { getClient, getKeyName, createRelationalRecord, deleteRelationalRecord, getRelationalRecord, getRelationalRecords } = require("@/database/redis");
 
 // Get Redis client
 const redis = getClient();
 
 // Create profile
 router.post(
-    '/profile/',
+    '/profile',
     [
         body().isObject(),
-        body('userId').isEmail(),
+        body('userId').isString({ min: 1 }),
         body('profileName').isString({ min: 1, message: "Profile name is required" }),
         reportValidationError,
     ],
     async (req, res) => {
         const { userId, profileName } = req.body;
-        const profileKey = getKeyName('profiles', profileName);
 
         // Create id
         const profileId = crypto.randomUUID()
+
         // Create profile
         const profile = {
             id: profileId,
@@ -34,7 +34,7 @@ router.post(
             userId,
         }
 
-        await createRecord(profileKey, profile)
+        await createRelationalRecord('profiles', profile)
 
         res.status(200).json(profile);
     }
@@ -42,16 +42,15 @@ router.post(
 
 // Get all user profiles
 router.get(
-    '/profile/',
+    '/profile',
     [
         param('userId').isString({ min: 1 }),
         reportValidationError,
     ],
     async (req, res) => {
         const { userId } = req.params;
-        const userKey = getKeyName('users', userId);
 
-        const profiles = await getRecords<Profile>('profile', userId)
+        const profiles = await getRelationalRecords('profiles', userId)
 
         res.status(200).json(profiles);
     }
@@ -67,10 +66,8 @@ router.get(
     ],
     async (req, res) => {
         const { userId, profileId } = req.params;
-        const userKey = getKeyName('users', userId);
-        const profileKey = getKeyName('profiles', profileId);
 
-        const profile = getRecord<Profile>(userKey, profileKey)
+        const profile = getRelationalRecord('profiles', profileId, userId)
 
         res.status(200).json(profile);
     }
@@ -86,12 +83,10 @@ router.delete(
     ],
     async (req, res) => {
         const { userId, profileId } = req.params;
-        const userKey = getKeyName('users', userId);
-        const profileKey = getKeyName('profiles', profileId);
 
-        await deleteRecord(userKey, profileKey)
+        await deleteRelationalRecord('profiles', profileId, userId)
 
-        res.status(200).json(profile);
+        res.send("OK");
     }
 );
 
@@ -108,30 +103,19 @@ router.post(
     ],
     async (req, res) => {
         const { profileId } = req.params;
-        const preferenceKey = getKeyName('profiles', profileId, 'preference');
-
+        
         const { lifestyle, allergen, health } = req.body;
-        const rawFormData = {
-            lifestyle: lifestyle,
-            allergen: allergen || 'None',
-            health: health,
-        };
 
-        const validatedFields = UpdateSchema.safeParse(rawFormData);
-        // If form validation fails, return errors early. Otherwise, continue.
-        if (!validatedFields.success) {
-            res.status(400).json({ resultCode: ResultCode.InvalidSubmission });
-        }
-
-        const { lifestyle, allergen, health } = validatedFields.data;
-
-        const preferences = {
+        // Create preference
+        const pref = {
             lifestyle: lifestyle,
             allergen: allergen,
             health: health,
         } 
 
-        await redisClient.hset(preferenceKey, preferences)
+        const preferenceKey = getKeyName('profiles', profileId, 'preference');
+
+        await redis.hset(preferenceKey, pref)
 
         res.status(200).json({ resultCode: ResultCode.UserUpdated });
     }
@@ -157,3 +141,5 @@ router.get(
         }
     }
 );
+
+module.exports = router;

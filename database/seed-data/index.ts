@@ -4,7 +4,7 @@ const bcrypt = require('bcrypt')
 require('dotenv').config();
 
 // Importing the class from the location of the file
-const  { getClient, getKeyName } = require("../redis");
+const  { getClient, getKeyName } = require("@/database/redis");
 
 // Get Redis client
 const redis = getClient();
@@ -37,7 +37,7 @@ const loadData = async (jsonArray, keyName) => {
 const loadUsers = async () => {
     console.log('Loading user data...');
     /* eslint-disable global-require */
-    const usersJSON = require('./users.json');
+    const usersJSON = require('@/database/seed-data/users.json');
     /* eslint-enable */
 
     // Hash the passwords...

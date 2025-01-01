@@ -2,8 +2,21 @@
     "compilerOptions": {
         "moduleDetection": "force",
         "noImplicitAny": false,
-        "strictNullChecks": true
+        "strictNullChecks": true,
+        "paths": {
+			"@/*": ["./*"]
+		}
     },
-    "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+	"ts-node": {
+		"require": ["tsconfig-paths/register"]
+	},
+	"files": [
+        "@/index.ts"
+    ],
+    "include": [
+		"**/*.ts", 
+		"**/*.tsx", 
+		".next/types/**/*.ts"
+	],
     "exclude": ["node_modules"]
   }
