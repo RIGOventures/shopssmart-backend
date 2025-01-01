@@ -1,7 +1,7 @@
 {
     "users": [
         {
-           	 "id": "4cd60ef1-606a-4cc2-a658-e832b962690c",
+        	"id": "4cd60ef1-606a-4cc2-a658-e832b962690c",
             	"username": "Admin",
         	"email": "admin@smart-shop.com",
 		"password": "admin"
