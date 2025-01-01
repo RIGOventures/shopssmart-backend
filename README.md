@@ -23,6 +23,8 @@ You can use RedisInsight by pointing your browser to http://localhost:8001.
 
 `docker run -d --name redis-stack -p 6379:6379 -p 8001:8001 redis/redis-stack:latest`
 
+If you have Docker Desktop, you can run the container from the app.
+
 You can use redis-cli to connect to the server at localhost:6379. 
 If you don’t have redis-cli installed locally, you can run it from the Docker container like below:
 

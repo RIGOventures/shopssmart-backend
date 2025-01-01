@@ -1,13 +1,13 @@
-import bcrypt from 'bcrypt'
+const bcrypt = require('bcrypt')
 
 // Import environment variables
-import 'dotenv/config';
+require('dotenv').config();
 
 // Importing the class from the location of the file
-import { getClient, getKeyName } from "./redis";
+const  { getClient, getKeyName } = require("../redis");
 
 // Get Redis client
-const redisClient = getClient();
+const redis = getClient();
 
 const usage = () => {
     console.error('Usage: pnpm run seed users|all');
@@ -15,7 +15,7 @@ const usage = () => {
 };
 
 const loadData = async (jsonArray, keyName) => {
-    const pipeline = redisClient.pipeline();
+    const pipeline = redis.pipeline();
 
     for (const obj of jsonArray) {
         pipeline.hset(getKeyName(keyName, obj.id), obj);
@@ -37,7 +37,7 @@ const loadData = async (jsonArray, keyName) => {
 const loadUsers = async () => {
     console.log('Loading user data...');
     /* eslint-disable global-require */
-    const usersJSON = require('../data/users.json');
+    const usersJSON = require('./users.json');
     /* eslint-enable */
 
     // Hash the passwords...
@@ -52,8 +52,27 @@ const loadUsers = async () => {
     console.log(`User data loaded with ${errorCount} errors.`);
 };
 
+const createIndexes = async () => {
+    console.log('Dropping any existing indexes, creating new indexes...');
+  
+    const usersIndexKey = getKeyName('users', 'idx');
+
+    const pipeline = redis.pipeline();
+    pipeline.call('FT.DROPINDEX', usersIndexKey);
+    pipeline.call('FT.CREATE', usersIndexKey, 'ON', 'HASH', 'PREFIX', '1', getKeyName('users'), 'SCHEMA', 'email', 'TAG', 'numCheckins', 'NUMERIC', 'SORTABLE', 'lastSeenAt', 'NUMERIC', 'SORTABLE', 'lastCheckin', 'NUMERIC', 'SORTABLE', 'firstName', 'TEXT', 'lastName', 'TEXT');
+
+    const responses = await pipeline.exec();
+  
+    if (responses.length === 2 && responses[1][1] === 'OK') {
+        console.log('Created indexes.');
+    } else {
+        console.log('Unexpected error creating indexes :(');
+        console.log(responses);
+    }
+};
+
 export default async function seed(params) {
-    console.log(params)
+    //console.log(params)
     if (params.length !== 4) {
         usage();
     }
@@ -66,12 +85,13 @@ export default async function seed(params) {
             break;
         case 'all':
             await loadUsers();
+            await createIndexes();
             break;
         default:
             usage();
     }
 
-    redisClient.quit();
+    redis.quit();
 };
 
 seed(process.argv);
