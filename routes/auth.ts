@@ -24,7 +24,7 @@ router.post(
     createUser
 );
 
-// Login at a user
+// Authenticates credentials against database
 router.post(
     '/login',
     [
@@ -35,20 +35,22 @@ router.post(
     ],
     async (req, res) => {
         const { email, password } = req.body;
-        
         // Need to escape . and @ in the email address when searching.
         const emailAddress = email.replace(/\./g, '\\.').replace(/\@/g, '\\@');
 
-        const searchResults = await performSearch(getKeyName('users', 'idx'), `@email:{${emailAddress}}`, 'RETURN', '1', 'password');
         // Valid searchResults looks like [ { password: 'ssssh' } ] but the password has
         // been encrypted with bcrypt (the dataloader encrypts passwords when loading data).
+        const searchResults = await performSearch(getKeyName('users', 'idx'), `@email:{${emailAddress}}`) //, 'RETURN', '1', 'password');
+        if (searchResults.length >= 1) {
+            // Get user
+            const existingUser = searchResults[0]
 
-        if (searchResults.length === 1) {
             // See if the correct password for this email was provided...
-            const passwordCorrect = await bcrypt.compare(password, searchResults[0].password);
+            const passwordCorrect = await bcrypt.compare(password, existingUser.password);
             if (passwordCorrect) {
-                console.log(`> Login for ${email}.`);
-                req.session.user = email;
+                console.log(`> Login user ${email}.`);
+                req.session.userId = existingUser.id;
+                req.session.email = existingUser.email;
                 return res.send('OK');
             }
         }
@@ -65,14 +67,14 @@ router.post(
 router.get(
     '/logout',
     (req, res) => {
-        const { user } = req.session;
+        const { userId, email } = req.session;
     
         req.session.destroy((err) => {
             if (err) {
                 console.log('Error performing logout:');
                 console.log(err);
-            } else if (user) {
-                console.log(`Logged out user ${user}.`);
+            } else if (email) {
+                console.log(`> Logout user ${email}.`);
             } else {
                 console.log('Logout called by a user without a session.');
             }

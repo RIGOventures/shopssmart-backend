@@ -6,6 +6,9 @@ const { ResultCode } = require('@/utils/result')
 // Get error report middleware
 const reportValidationError = require('@/utils/report-validation-error');
 
+// Get authentication middleware
+const isAuthenticated = require('@/utils/check-session');
+
 // Get Redis function
 const { getClient, getKeyName, createRelationalRecord, deleteRelationalRecord, getRelationalRecord, getRelationalRecords } = require("@/database/redis");
 
@@ -16,13 +19,16 @@ const redis = getClient();
 router.post(
     '/profile',
     [
+        isAuthenticated,
         body().isObject(),
-        body('userId').isString({ min: 1 }),
         body('profileName').isString({ min: 1, message: "Profile name is required" }),
         reportValidationError,
     ],
     async (req, res) => {
-        const { userId, profileName } = req.body;
+        // Get session
+        const { userId } = req.session;
+
+        const { profileName } = req.body;
 
         // Create id
         const profileId = crypto.randomUUID()
@@ -44,11 +50,12 @@ router.post(
 router.get(
     '/profile',
     [
-        param('userId').isString({ min: 1 }),
+        isAuthenticated,
         reportValidationError,
     ],
     async (req, res) => {
-        const { userId } = req.params;
+        // Get session
+        const { userId } = req.session;
 
         const profiles = await getRelationalRecords('profiles', userId)
 
@@ -60,12 +67,15 @@ router.get(
 router.get(
     '/profile/:profileId',
     [
-        param('userId').isString({ min: 1 }),
+        isAuthenticated,
         param('profileId').isString({ min: 1 }),
         reportValidationError,
     ],
     async (req, res) => {
-        const { userId, profileId } = req.params;
+        // Get session
+        const { userId } = req.session;
+
+        const { profileId } = req.params;
 
         const profile = getRelationalRecord('profiles', profileId, userId)
 
@@ -77,12 +87,15 @@ router.get(
 router.delete(
     '/profile/:profileId',
     [
-        param('userId').isString({ min: 1 }),
+        isAuthenticated,
         param('profileId').isString({ min: 1 }),
         reportValidationError,
     ],
     async (req, res) => {
-        const { userId, profileId } = req.params;
+        // Get session
+        const { userId } = req.session;
+
+        const { profileId } = req.params;
 
         await deleteRelationalRecord('profiles', profileId, userId)
 

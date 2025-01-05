@@ -8,6 +8,10 @@
 		"start": "NODE_ENV=production ts-node index.ts"
 	},
 	"dependencies": {
+		"@ai-sdk/google-vertex": "^2.0.12",
+		"@ai-sdk/provider": "^1.0.3",
+		"ai": "^4.0.*",
+		"axios": "^1.7.9",
 		"bcrypt": "^5.1.1",
 		"connect-redis": "^8.0.1",
 		"cors": "^2.8.5",
@@ -15,6 +19,7 @@
 		"express": "^4.21.2",
 		"express-session": "^1.18.1",
 		"express-validator": "^7.2.1",
+		"google-auth-library": "^9.15.0",
 		"ioredis": "^5.4.2",
 		"tsconfig-paths": "^4.2.0"
 	},

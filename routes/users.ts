@@ -29,8 +29,8 @@ const createUser = async (req, res) => {
 
     // Check if this email address is in use
     const searchResults = await performSearch(getKeyName('users', 'idx'), `@email:{${emailAddress}}`);
-    if (searchResults.length === 1) {
-        res.status(400).json({ resultCode: ResultCode.UserAlreadyExists })
+    if (searchResults.length >= 1) {
+        return res.status(400).json({ resultCode: ResultCode.UserAlreadyExists })
     }
 
     // Encrypy password
@@ -50,7 +50,7 @@ const createUser = async (req, res) => {
 
     await redis.hset(userKey, user)
 
-    res.status(200).json({ resultCode: ResultCode.UserCreated })
+    return res.status(200).json({ resultCode: ResultCode.UserCreated })
 }
 
 // Create a user.
@@ -153,8 +153,31 @@ router.get(
     },
 );
 
+// Create a user.
+router.delete(
+    '/user/:userId',
+    [
+        param('userId').isString({ min: 1 }),
+        reportValidationError,
+    ],
+    async (req, res) => {
+        const { userId } = req.params;
+        const userKey = getKeyName('users', userId);
+
+        const existingUser = await redis.hgetall(userKey);
+        if (existingUser) {
+           // Delete the record
+            await redis.del(userKey)
+
+            res.status(200).json({ resultCode: ResultCode.UserUpdated });
+        } else {
+            res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
+        }
+    }
+);
+
 // Set user profile.
-router.post(
+router.put(
     '/user/:userId/profile',
     [
         param('userId').isString({ min: 1 }),
