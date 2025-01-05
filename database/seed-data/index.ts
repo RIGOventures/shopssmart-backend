@@ -59,7 +59,7 @@ const createIndexes = async () => {
 
     const pipeline = redis.pipeline();
     pipeline.call('FT.DROPINDEX', usersIndexKey);
-    pipeline.call('FT.CREATE', usersIndexKey, 'ON', 'HASH', 'PREFIX', '1', getKeyName('users'), 'SCHEMA', 'email', 'TAG', 'numCheckins', 'NUMERIC', 'SORTABLE', 'lastSeenAt', 'NUMERIC', 'SORTABLE', 'lastCheckin', 'NUMERIC', 'SORTABLE', 'firstName', 'TEXT', 'lastName', 'TEXT');
+    pipeline.call('FT.CREATE', usersIndexKey, 'ON', 'HASH', 'PREFIX', '1', getKeyName('users'), 'SCHEMA', 'email', 'TAG', 'username', 'TEXT');
 
     const responses = await pipeline.exec();
   
