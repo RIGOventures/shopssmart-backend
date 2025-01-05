@@ -15,7 +15,7 @@ const removeSensitiveFields = require('@/utils/remove-sensitive-fields');
 const reportValidationError = require('@/utils/report-validation-error');
 
 // Get Redis function
-const { getClient, getKeyName, performSearch } = require("@/database/redis");
+const { getClient, getKeyName, performSearch, getRelationalRecord } = require("@/database/redis");
 
 // Get Redis client
 const redis = getClient();
@@ -89,6 +89,7 @@ router.get(
             userKeys.push(...resultKeys)
         } while (cursor != 0)
 
+        // Start pipeline
         const pipeline = redis.pipeline()
 
         // Get all users saved
@@ -121,13 +122,15 @@ router.get(
         const userKey = getKeyName('users', userId);
 
         const existingUser = await redis.hgetall(userKey);
-        if (existingUser) {
-            SENSITIVE_FIELD_NAMES.map((fieldName) => delete existingUser[fieldName]);
-
-            res.status(200).json(existingUser);
-        } else {
+        if (!existingUser || Object.keys(existingUser).length < 1) {
             res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
+            return
         }
+
+        // Remove sensitive fields
+        SENSITIVE_FIELD_NAMES.map((fieldName) => delete existingUser[fieldName]);
+
+        res.status(200).json(existingUser);
         
     },
 );
@@ -165,14 +168,15 @@ router.delete(
         const userKey = getKeyName('users', userId);
 
         const existingUser = await redis.hgetall(userKey);
-        if (existingUser) {
-           // Delete the record
-            await redis.del(userKey)
-
-            res.status(200).json({ resultCode: ResultCode.UserUpdated });
-        } else {
+        if (!existingUser || Object.keys(existingUser).length < 1) {
             res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
+            return
         }
+
+        // Delete the record
+        await redis.del(userKey)
+
+        res.status(200).json({ resultCode: ResultCode.UserUpdated });
     }
 );
 
@@ -186,21 +190,25 @@ router.put(
         reportValidationError,
     ],
     async (req, res) => {
-
+        // Get session
         const { userId } = req.params;
         const userKey = getKeyName('users', userId);
 
-        const existingUser = await redis.hgetall(userKey);
-        if (!existingUser) {
-            res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
-        }
+        // Get profile (to ensure it exists)
+        const { profileId } = req.params;
+        const profile = await getRelationalRecord('profiles', profileId, userId)
 
-        const { profileId } = req.body;
+        // Check 
+        const existingUser = await redis.hgetall(userKey);
+        if (!existingUser || Object.keys(existingUser).length < 1) {
+            res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
+            return
+        }
 
         // Update user
         const user = {
             ...existingUser,
-            profileId: profileId
+            profileId: profile.id
         } 
 
         await redis.hset(userKey, user)
@@ -222,13 +230,14 @@ router.get(
         const userKey = getKeyName('users', userId);
 
         const existingUser = await redis.hgetall(userKey);
-        if (existingUser) {
-            // TODO: Get the profileId field from the user hash whose key is in userKey.
-            // Check out the HMGET command... https://redis.io/commands/hmget
-            res.status(200).json({ profileId: existingUser.profileId || 'default' });
-        } else {
+        if (!existingUser || Object.keys(existingUser).length < 1) {
             res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
+            return
         }
+
+        // TODO: Get the profileId field from the user hash whose key is in userKey.
+        // Check out the HMGET command... https://redis.io/commands/hmget
+        res.status(200).json({ profileId: existingUser.profileId || 'default' });
     }
 );
 

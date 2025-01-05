@@ -14,9 +14,10 @@ const { getClient } = require("@/database/redis");
 // Get Redis client
 const redis = getClient();
 
+const MAX_REQUESTS = 5
+
 async function getUserRequestData(userIP: string): Promise<UserRequestData | null> {
 	try {
-		// <UserRequestData>
 		const data = await redis.get(userIP);
 		return data;
 	} catch (error) {
@@ -25,7 +26,7 @@ async function getUserRequestData(userIP: string): Promise<UserRequestData | nul
 	}
 }
 
-async function updateUserRequestData(userIP: string, data: UserRequestData) {
+async function setUserRequestData(userIP: string, data: UserRequestData) {
 	try {
 		await redis.set(userIP, data);
 	} catch (error) {
@@ -37,41 +38,45 @@ async function updateUserRequestData(userIP: string, data: UserRequestData) {
 // Middleware function to enforce rate limits
 export async function rateLimit(userIP: string) {
 	
-	const userRequests = await getUserRequestData(userIP);
-
 	// Check if the user has made requests before
+	const userRequests = await getUserRequestData(userIP);
 	if (userRequests) {
 		const { count, lastResetTime } = userRequests;
-		const currentTime = Date.now();
-
+		
 		// Check if it's a new day and reset the count
+		const currentTime = Date.now();
 		const currentDay = new Date(currentTime).toLocaleDateString();
 		const lastResetDay = new Date(lastResetTime).toLocaleDateString();
 		if (currentDay !== lastResetDay) {
-			userRequests.count = 1;
-			userRequests.lastResetTime = currentTime;
-			await updateUserRequestData(userIP, userRequests);
-		} else {
-			// Check if the user has exceeded the rate limit (5 requests per day)
-			if (count >= 5) {
-                return {
-                    type: 'error',
-                    resultCode: ResultCode.RateLimited
-                }
-			}
-
-			// Increment the request count for the user
-			userRequests.count++;
-			await updateUserRequestData(userIP, userRequests);
+			const newUserRequests: UserRequestData = {
+				count: 1,
+				lastResetTime: currentTime
+			};
+			await setUserRequestData(userIP, newUserRequests);
+			return;
 		}
+
+		// Check if the user has exceeded the rate limit (5 requests per day)
+		if (count >= MAX_REQUESTS) {
+			// TODO: Error code 420:
+			return {
+				type: 'error',
+				resultCode: ResultCode.RateLimited
+			}
+		}
+
+		// Increment the request count for the user
+		userRequests.count++;
+		await setUserRequestData(userIP, userRequests);
+
 	} else {
 		// Create a new user entry with initial request count and timestamp
 		const newUserRequests: UserRequestData = {
 			count: 1,
 			lastResetTime: Date.now()
 		};
-		await updateUserRequestData(userIP, newUserRequests);
+		await setUserRequestData(userIP, newUserRequests);
 	}
 
-	return null;
+	return;
 }

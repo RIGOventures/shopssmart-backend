@@ -28,8 +28,9 @@ router.post(
         // Get session
         const { userId } = req.session;
 
+        // Get profile name
         const { profileName } = req.body;
-
+ 
         // Create id
         const profileId = crypto.randomUUID()
 
@@ -43,6 +44,7 @@ router.post(
         await createRelationalRecord('profiles', profile)
 
         res.status(200).json(profile);
+
     }
 );
 
@@ -77,9 +79,13 @@ router.get(
 
         const { profileId } = req.params;
 
-        const profile = getRelationalRecord('profiles', profileId, userId)
+        const profile = await getRelationalRecord('profiles', profileId, userId)
+        if (profile) {
+            res.status(200).json(profile);
+        } else {
+            res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
+        }
 
-        res.status(200).json(profile);
     }
 );
 
@@ -104,33 +110,32 @@ router.delete(
 );
 
 // Set profile preferences by ID
-router.post(
+router.put(
     '/profile/:profileId/preference',
     [
         param('profileId').isString({ min: 1 }),
         body().isObject(),
-        body('lifestyle').isString(),
-        body('allergen').isString(),
-        body('health').isString(),
+        body('lifestyle').isString(), // TODO: Check as enum
+        body('allergen').isString(), // TODO: Check as enum
+        body('other').isString(),
         reportValidationError,
     ],
     async (req, res) => {
+        // Create profile Id
         const { profileId } = req.params;
-        
-        const { lifestyle, allergen, health } = req.body;
+        const preferenceKey = getKeyName('profiles', profileId, 'preferences');
 
         // Create preference
+        const { lifestyle, allergen, other } = req.body;
         const pref = {
             lifestyle: lifestyle,
             allergen: allergen,
-            health: health,
+            other: other,
         } 
-
-        const preferenceKey = getKeyName('profiles', profileId, 'preference');
 
         await redis.hset(preferenceKey, pref)
 
-        res.status(200).json({ resultCode: ResultCode.UserUpdated });
+        res.status(200).json({ resultCode: ResultCode.ProfileUpdated });
     }
 );
 
@@ -142,16 +147,13 @@ router.get(
         reportValidationError,
     ],
     async (req, res) => {
+        // Get primary key
         const { profileId } = req.params;
         const preferenceKey = getKeyName('profiles', profileId, 'preferences');
 
-        try {
-            const pref = await redis.hgetall(preferenceKey)
-            res.status(200).json(pref);
-        } catch (error) {
-            console.error('Failed to fetch profile:', error);
-            res.status(400).json({ error: 'Failed to fetch profile.'});
-        }
+        const pref = await redis.hgetall(preferenceKey)
+            
+        res.status(200).json(pref);
     }
 );
 

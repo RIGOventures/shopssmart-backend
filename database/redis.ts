@@ -1,12 +1,17 @@
 const Redis = require('ioredis');
 
 // Create client & connect to Redis
-const redis = new Redis({
-    username: process.env.REDIS_USERNAME,
-    password: process.env.REDIS_PASSWORD,
-    host: process.env.REDIS_HOST,
-    port: parseInt(process.env.REDIS_PORT!),
-});
+const redis = new Redis(
+    // Port
+    Number(process.env.REDIS_PORT || 6379), 
+    // Host
+    process.env.REDIS_HOST, 
+    // Options
+    {
+        username: process.env.REDIS_USERNAME,
+        password: process.env.REDIS_PASSWORD,
+    }
+);
 
 // Convert a list of indexes to an index key
 const getKeyName = (...args) => `${args.join(':')}`
@@ -60,93 +65,70 @@ const performSearch = async (index: string, ...query) => {
 
 // Set a record and link to a user 
 const createRelationalRecord = async (index: string, record: { id: string, userId: string }) => {
-    try {
-        const pipeline = redis.pipeline()
+    const pipeline = redis.pipeline()
     
-        // Set to the primary key
-        const primaryKey = getKeyName(index, record.id)
-        pipeline.hset(primaryKey, record)
-        
-        // Set to foreign key
-        const foreignKey = getKeyName('users', index, record.userId)
-        pipeline.zadd(foreignKey, {
-            score: Date.now(), // Sort by date
-            member: primaryKey // The actual value
-        })
+    // Set to the primary key
+    const primaryKey = getKeyName(index, record.id)
+    pipeline.hset(primaryKey, record)
+    
+    // Set to foreign key
+    const foreignKey = getKeyName('users', index, record.userId)
+    pipeline.zadd(foreignKey, Date.now(), primaryKey)
 
-        await pipeline.exec()
-    } catch (e) {
-        // A malformed query or unknown index etc causes an exception type error.
-        console.error(e);
+    await pipeline.exec()
+}
+
+const getRelationalRecord = async (index: string, id: string, userId: string) => {
+    // Set to the primary key
+    const primaryKey = getKeyName(index, id)
+
+    // Get the record
+    const record = await redis.hgetall(primaryKey)
+
+    // If empty list key does not exist. 
+    if (record == undefined || Object.keys(record).length < 1) {
+        throw new Error(`${primaryKey} does not exist`)
     }
+
+    // Compare with session.userId
+    if (record.userId != userId) {
+        throw new Error('Unauthorized')
+    }
+
+    return record
 }
 
 // Delete a record
 const deleteRelationalRecord = async (index: string, id: string, userId: string) => {
-    try {
-        const primaryKey = getKeyName(index, id)
+    // Get record
+    const record = await getRelationalRecord(index, id, userId)
 
-        // Compare with session.user.id
-        const uid = String(await redis.hget(getKeyName(primaryKey, 'userId')))
-        if (uid !== userId) {
-            new Error('Unauthorized')
-        }
-    
-        // Delete the record
-        await redis.del(primaryKey)
+    // Delete the record
+    const primaryKey = getKeyName(index, record.id)
+    await redis.del(primaryKey)
 
-        // Remove the foreign key
-        const foreignKey = getKeyName('users', index, userId)
-        await redis.zrem(foreignKey, primaryKey)
-    } catch (e) {
-        // A malformed query or unknown index etc causes an exception type error.
-        console.error(e);
-    }
-}
-
-const getRelationalRecord = async (index: string, id: string, userId: string) => {
-    try {
-        // Set to the primary key
-        const primaryKey = getKeyName(index, id)
-
-        // Get the record
-        const record = await redis.hgetall(primaryKey)
-
-        // Compare with session.user.id
-        if (record.userId !== userId) {
-            new Error('Unauthorized')
-        }
-
-        return record
-    } catch (e) {
-        // A malformed query or unknown index etc causes an exception type error.
-        console.error(e);
-        return [];
-    }
+    // Remove the foreign key
+    const foreignKey = getKeyName('users', index, record.userId)
+    await redis.zrem(foreignKey, primaryKey)
 }
 
 const getRelationalRecords = async (index: string, userId: string) => {
-    try {
-        const pipeline = redis.pipeline()
+    const pipeline = redis.pipeline()
 
-        // Fetch all the records stored with the user in reverse order
-        const foreignKey = getKeyName('users', index, userId)
-        const records: string[] = await redis.zrange(foreignKey, 0, -1, {
-            rev: true
-        })
+    // Fetch all the records stored with the user in reverse order
+    const foreignKey = getKeyName('users', index, userId)
+    const records: string[] = await redis.zrange(foreignKey, 0, -1, 'REV')
 
-        // Get all records saved
-        for (const record of records) {
-            pipeline.hgetall(record)
-        }
-
-        const results = await pipeline.exec()
-        return results
-    } catch (e) {
-       // A malformed query or unknown index etc causes an exception type error.
-       console.error(e);
-       return [];
+    // Get all records saved
+    for (const record of records) {
+        pipeline.hgetall(record)
     }
+
+    const results = await pipeline.exec()
+    
+    // Flatten and filter results
+    const filtered = results.flat().filter(function (el) { return el != null; });
+    return filtered
 }
 
 // Export functions
@@ -155,7 +137,7 @@ module.exports = {
     getKeyName,
     performSearch,
     createRelationalRecord,
-    deleteRelationalRecord, 
     getRelationalRecord,
+    deleteRelationalRecord, 
     getRelationalRecords
 };

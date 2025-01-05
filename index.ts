@@ -17,6 +17,7 @@ const redis = getClient();
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 
 // Initialise store.
 let redisStore = new RedisStore({
@@ -34,13 +35,36 @@ app.use(session({
     saveUninitialized: true,
 }));
   
-
 // Sets up these routes on a base '/' route
 const routes = require('./routes');
 app.use(
     '/', 
     routes 
 ); 
+
+// Log server errors (not try-catch)
+app.use(function (err, req, res, next) {
+    console.error(err.stack)
+    next(err)
+  }
+)
+
+// Handle server errors (not try-catch)
+app.use(function(err, req, res, next) {
+    res.status(err.status || 500).json({ error: err });
+});
+
+// Catch any unhandled exception occurs
+process.on('uncaughtException', function(err, data) {
+    console.log(`Uncaught Exception: ${err.message}`)
+    //process.exit(1)
+})
+
+// Catch any unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+    console.log('Unhandled Rejection at', promise, `reason: ${reason}`)
+    //process.exit(1)
+})
 
 // Default response
 app.get(

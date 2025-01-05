@@ -17,7 +17,7 @@ export async function getMissingKeys() {
         .filter(key => key !== '')
 }
 
-export const getGCPCredentials = () => {
+export const getGCPCredentials = async () => {
     const credentials = JSON.parse(
         Buffer.from(process.env.GOOGLE_SERVICE_KEY || '', "base64").toString()
     );

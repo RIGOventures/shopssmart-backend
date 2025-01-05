@@ -1,6 +1,8 @@
 const router = require('express').Router();
 const { body, param } = require('express-validator');
 
+const { ResultCode } = require('@/utils/result')
+
 const bcrypt = require('bcrypt')
 
 // Get Redis function
@@ -49,17 +51,30 @@ router.post(
             const passwordCorrect = await bcrypt.compare(password, existingUser.password);
             if (passwordCorrect) {
                 console.log(`> Login user ${email}.`);
+
+                // Add session
                 req.session.userId = existingUser.id;
                 req.session.email = existingUser.email;
-                return res.send('OK');
+
+                // Redirect?
+                return res.status(200).json({
+                    type: 'success',
+                    resultCode: ResultCode.UserLoggedIn
+                })
             }
         }
     
         // Remove any session this user previously had.
         req.session.destroy();
     
-        console.log(`Failed login attempt for ${email}.`);
-        return res.status(401).send('Invalid login.');
+        const message = `Failed login attempt for ${email}.`
+        console.log(message);
+
+        res.status(401).json({ 
+            type: 'error',
+            resultCode: ResultCode.InvalidCredentials,
+            message: message
+        })
     },
 );
   
@@ -67,19 +82,22 @@ router.post(
 router.get(
     '/logout',
     (req, res) => {
-        const { userId, email } = req.session;
+        const { email } = req.session;
     
-        req.session.destroy((err) => {
-            if (err) {
+        req.session.destroy((e) => {
+            if (e) {
                 console.log('Error performing logout:');
-                console.log(err);
-            } else if (email) {
+                console.log(e);
+                return
+            }
+
+            if (email) {
                 console.log(`> Logout user ${email}.`);
             } else {
                 console.log('Logout called by a user without a session.');
             }
         });
-    
+
         res.send('OK');
     },
 );

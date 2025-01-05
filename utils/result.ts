@@ -1,13 +1,23 @@
 export enum ResultCode {
     InvalidCredentials  = 'INVALID_CREDENTIALS',
     InvalidSubmission   = 'INVALID_SUBMISSION',
-    UserAlreadyExists   = 'USER_ALREADY_EXISTS',
     UnknownError        = 'UNKNOWN_ERROR',
+    RateLimited         = "RATE_LIMIT_EXCEEDED",
+
+    // User
     UserCreated         = 'USER_CREATED',
-    ProfileCreated      = 'PROFILE_CREATED',
-    UserUpdated         = 'USER_UPDATED',
+    UserAlreadyExists   = 'USER_ALREADY_EXISTS',
     UserLoggedIn        = 'USER_LOGGED_IN',
-    RateLimited         = "RATE_LIMIT_EXCEEDED"
+    UserUpdated         = 'USER_UPDATED',
+
+    // Profile
+    ProfileCreated      = 'PROFILE_CREATED',
+    ProfileUpdated      = 'PROFILE_UPDATED',
+
+    // Chat
+    ChatCreated         = 'CHAT_CREATED',
+    ChatUpdated         = 'CHAT_UPDATED',
+
 }
   
 export const getMessageFromCode = (resultCode: string) => {

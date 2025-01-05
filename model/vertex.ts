@@ -33,12 +33,12 @@ getGCPCredentials().then((credentials: any) => {
 const modelInstruction = createInstruction();
 
 // Submit a prompt to a model
-type Preferences = { lifestyle: string, allergen: string, health: string }
+type Preferences = { lifestyle: string, allergen: string, other: string }
 export async function submitPrompt(content: string, preferences: Preferences, onFinish: ({ text }: { text: string}) => void) {
 
     // Create message with preferences
     let categories = (preferences.lifestyle ? preferences.lifestyle : '') + preferences.allergen
-    const userPrompt = createPrompt(content, categories, preferences.health)
+    const userPrompt = createPrompt(content, categories, preferences.other)
 
     // Generate stream
     const result = streamText({
