@@ -123,7 +123,7 @@ router.put(
     async (req, res) => {
         // Create profile Id
         const { profileId } = req.params;
-        const preferenceKey = getKeyName('profiles', profileId, 'preferences');
+        const preferenceKey = getKeyName('profiles', 'preferences', profileId);
 
         // Create preference
         const { lifestyle, allergen, other } = req.body;
@@ -131,6 +131,7 @@ router.put(
             lifestyle: lifestyle,
             allergen: allergen,
             other: other,
+            profileId: profileId
         } 
 
         await redis.hset(preferenceKey, pref)
@@ -149,7 +150,7 @@ router.get(
     async (req, res) => {
         // Get primary key
         const { profileId } = req.params;
-        const preferenceKey = getKeyName('profiles', profileId, 'preferences');
+        const preferenceKey = getKeyName('profiles', 'preferences', profileId);
 
         const pref = await redis.hgetall(preferenceKey)
             

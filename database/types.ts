@@ -1,55 +1,44 @@
 // This file contains type definitions for data.
 // It describes the shape of the data, and what data type each property should accept.
+import { ResultCode } from '@/utils/result'
 
-import { CoreMessage, CreateMessage } from 'ai'
-import { ResultCode } from '@/lib/utils/result'
-
-/**
-type CoreMessage = {
-    role: string;
-    content: UserContent;
-};
-*/
-
-export type Message = CoreMessage  & {
+export interface User {
     id: string
-} | CreateMessage
-
-export interface Log extends Record<string, any> {
-    id: string
-    userId: string
+    email: string
+    password: string
+    profileId?: string
 }
 
-export interface Chat extends Log {  
+export type Message = {
+    role: string,
+    content: string
+}
+
+export interface Chat {  
+    id: string
     title: string
     createdAt: Date
-    path: string
-    messages: Message[]
+    path?: string
+    messages: Message[] // Is stored as a string
     sharePath?: string
 }
 
-export interface Profile extends Log {
+export interface Profile {
+    id: string
     name: string
+    userId: string
 }
 
 export interface Preferences {
     lifestyle?: string, 
     allergen?: string, 
-    other?: string
+    other?: string,
+    profileId: string
 }
 
 export interface Session {
-    user: {
-        id: string
-        email: string
-    }
-}
-
-export interface User extends Record<string, any> {
-    id: string
+    userId: string,
     email: string
-    password: string
-    profile?: string
 }
 
 export interface Result {
@@ -57,6 +46,3 @@ export interface Result {
     message?: string;
     resultCode: ResultCode
 }
-
-export type ServerActionResult<Result> = Promise<Result | { error: string }>
-

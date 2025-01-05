@@ -225,7 +225,7 @@ router.post(
             req.body.messages = chatMessages // Add to body
             
             // Save chat
-            const chat = await saveChat(req, res)
+            await saveChat(req, res)
 
             // End stream
             res.end(text)
