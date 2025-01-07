@@ -1,23 +1,27 @@
 const router = require('express').Router();
 const { body, param } = require('express-validator');
 
+// Types
 const { ResultCode } = require('@/utils/result')
 
 const { pipeline } = require("node:stream/promises");
 
 const { convertToCoreMessages } = require('ai');
 
-// Get error report middleware
-const reportValidationError = require('@/utils/report-validation-error');
-
-// Get authentication middleware
-const isAuthenticated = require('@/utils/check-session');
+// Get validators
+const isAuthenticated = require('@/utils/validation/check-session'); // Get authentication middleware
+const rateLimit = require('@/utils/validation/rate-limit'); // Get authentication middleware
+const reportValidationError = require('@/utils/validation/report-validation-error'); // Get error report middleware
 
 // Get Redis function
-const { getClient, getKeyName, createRelationalRecord, deleteRelationalRecord, getRelationalRecord, getRelationalRecords } = require("@/database/redis");
-
-// Rate limit utility
-const { rateLimit } = require("@/database/rate-limit");
+const { 
+    getClient, 
+    getKeyName, 
+    createRelationalRecord, 
+    deleteRelationalRecord, 
+    getRelationalRecord, 
+    getRelationalRecords 
+} = require("@/database/redis");
 
 // Get Redis client
 const redis = getClient();
@@ -137,7 +141,9 @@ router.get(
     '/chat/:chatId',
     [
         isAuthenticated,
-        param('chatId').isString({ min: 1 }),
+        param('chatId')
+            .isString()
+            .isLength({ min: 1 }),
         reportValidationError,
     ],
     async (req, res) => {
@@ -156,23 +162,7 @@ router.get(
     },
 );
 
-// Rate limit by middleware
-const rateLimitValidation = async (req, res, next) => {
-    // Get header
-    const headersList = req.headers
-    // Get user ip
-    const userIP =
-        headersList['x-forwarded-for'] || headersList['cf-connecting-ip'] || req.socket.remoteAddress || '';
 
-    // Apply rate limit middleware
-    const rateLimitResult = await rateLimit(userIP);
-    if (rateLimitResult) {
-        // TODO: enable in production
-        //return rateLimitResult;
-    }
-
-    return next()
-}
 // Get preferences
 const getPreferences = async (userId: number) => {
    // Get user
@@ -192,10 +182,14 @@ router.post(
     '/chat/:chatId',
     [
         isAuthenticated,
-        rateLimitValidation,
-        param('chatId').isString({ min: 1 }),
+        rateLimit,
+        param('chatId')
+            .isString()
+            .isLength({ min: 1 }),
         body().isObject(),
-        body('content').isString({ min: 1 }),
+        body('content')
+            .isString()
+            .isLength({ min: 1 }),
         reportValidationError,
     ],
     async (req, res) => {
@@ -245,7 +239,9 @@ router.delete(
     '/chat/:chatId',
     [
         isAuthenticated,
-        param('chatId').isString({ min: 1 }),
+        param('chatId')
+            .isString()
+            .isLength({ min: 1 }),
         reportValidationError,
     ],
     async (req, res) => {
@@ -266,7 +262,9 @@ router.put(
     '/chat/:chatId/share',
     [
         isAuthenticated,
-        param('chatId').isString({ min: 1 }),
+        param('chatId')
+            .isString()
+            .isLength({ min: 1 }),
         reportValidationError,
     ],
     async (req, res) => {
@@ -295,7 +293,9 @@ router.put(
 router.get(
     '/chat/:chatId/share',
     [
-        param('chatId').isString({ min: 1 }),
+        param('chatId')
+            .isString()
+            .isLength({ min: 1 }),
         reportValidationError,
     ],
     async (req, res) => {

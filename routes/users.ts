@@ -1,9 +1,10 @@
 const router = require('express').Router();
 const { body, param } = require('express-validator');
 
-const bcrypt = require('bcrypt')
-
+// Types
 const { ResultCode } = require('@/utils/result')
+
+const bcrypt = require('bcrypt')
 
 // Sensitive fields
 const SENSITIVE_FIELD_NAMES = ['password'];
@@ -11,27 +12,24 @@ const SENSITIVE_FIELD_NAMES = ['password'];
 // Remove sensitive fields
 const removeSensitiveFields = require('@/utils/remove-sensitive-fields');
 
-// Get error report middleware
-const reportValidationError = require('@/utils/report-validation-error');
+// Get validators
+const reportValidationError = require('@/utils/validation/report-validation-error'); // Get error report middleware
 
 // Get Redis function
-const { getClient, getKeyName, performSearch, getRelationalRecord } = require("@/database/redis");
+const { 
+    getClient, 
+    getKeyName, 
+    performSearch, 
+    getRelationalRecord 
+} = require("@/database/redis");
 
 // Get Redis client
 const redis = getClient();
 
 // Create user
 const createUser = async (req, res) => {
+    // Get body
     const { email, password } = req.body;
-
-    // Need to escape . and @ in the email address when searching.
-    const emailAddress = email.replace(/\./g, '\\.').replace(/\@/g, '\\@');
-
-    // Check if this email address is in use
-    const searchResults = await performSearch(getKeyName('users', 'idx'), `@email:{${emailAddress}}`);
-    if (searchResults.length >= 1) {
-        return res.status(400).json({ resultCode: ResultCode.UserAlreadyExists })
-    }
 
     // Encrypy password
     const saltRounds = 10; // Typically a value between 10 and 12
@@ -58,8 +56,24 @@ router.post(
     '/user',
     [
         body().isObject(),
-        body('email').isEmail(),
-        body('password').isString({ min: 6 }),
+        body('email')
+            .isEmail()
+            .trim()
+            .custom(async value => {
+                // Format email address usable by Redis (do not save this!)
+                const emailAddress = value.replace(/\./g, '\\.').replace(/\@/g, '\\@');
+
+                // Search using the formatted email
+                const searchResults = await performSearch(getKeyName('users', 'idx'), `@email:{${emailAddress}}`);
+                if (searchResults.length >= 1) {
+                    // TODO: Send result code { resultCode: ResultCode.UserAlreadyExists }
+                    throw new Error('E-mail already in use');
+                }
+            }),
+        body('password')
+            .isString()
+            .trim()
+            .isLength({ min: 6 }),
         reportValidationError,
     ],
     createUser
@@ -100,7 +114,9 @@ router.get(
         const results = await pipeline.exec()
 
         // Flatten and filter results
-        const filtered = results.flat().filter(function (el) { return el != null; });
+        const filtered = results.flat()
+            .filter(function (el) { return el != null; })
+            .filter(function (el) { return el["command"] == null; });
 
         // Remove sensitive fields
         SENSITIVE_FIELD_NAMES.map((fieldName) =>
@@ -114,7 +130,9 @@ router.get(
 router.get(
     '/user/:userId',
     [
-        param('userId').isString({ min: 1 }),
+        param('userId')
+            .isString()
+            .isLength({ min: 1 }),
         reportValidationError,
     ],
     async (req, res) => {
@@ -139,14 +157,17 @@ router.get(
 router.get(
     '/user/email/:email',
     [
-        param('email').isEmail(),
+        param('email')
+            .isEmail(),
         reportValidationError,
     ],
     async (req, res) => {
+        // Get parameters
         const { email } = req.params;
-        // Need to escape . and @ in the email address when searching.
+
+        // Format email address usable by Redis (do not save this!)
         const emailAddress = email.replace(/\./g, '\\.').replace(/\@/g, '\\@');
-  
+
         const searchResults = await performSearch(getKeyName('users', 'idx'), `@email:{${emailAddress}}`);
         const response = searchResults.length === 1
             ? removeSensitiveFields(searchResults, ...SENSITIVE_FIELD_NAMES)[0]
@@ -160,7 +181,9 @@ router.get(
 router.delete(
     '/user/:userId',
     [
-        param('userId').isString({ min: 1 }),
+        param('userId')
+            .isString()
+            .isLength({ min: 1 }),
         reportValidationError,
     ],
     async (req, res) => {
@@ -184,9 +207,13 @@ router.delete(
 router.put(
     '/user/:userId/profile',
     [
-        param('userId').isString({ min: 1 }),
+        param('userId')
+            .isString()
+            .isLength({ min: 1 }),
         body().isObject(),
-        body('profileId').isString({ min: 1 }),
+        body('profileId')
+            .isString()
+            .isLength({ min: 1 }),
         reportValidationError,
     ],
     async (req, res) => {
@@ -221,7 +248,9 @@ router.put(
 router.get(
     '/user/:userId/profile',
     [
-        param('userId').isString({ min: 1 }),
+        param('userId')
+            .isString()
+            .isLength({ min: 1 }),
         reportValidationError,
     ],
     async (req, res) => {

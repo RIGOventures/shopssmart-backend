@@ -1,22 +1,21 @@
-import { LanguageModelV1 } from '@ai-sdk/provider';
-import { JSONClient } from 'google-auth-library/build/src/auth/googleauth'
-type Client = JSONClient & { scopes: string | [string] }
-
 import { getGCPCredentials } from '@/utils/env-auth';
-import { auth as googleAuth } from 'google-auth-library';
+import { auth, JWT } from 'google-auth-library';
 
 import { createVertex } from '@ai-sdk/google-vertex'
-import { createInstruction, createPrompt } from '@/utils/ai-model'
+import { createInstruction, createPrompt } from '@/model/prompt'
 
 import { streamText } from 'ai';
 
 // Create Google gemini model
-let model: any //: LanguageModelV1;
+let model
 
 getGCPCredentials().then((credentials: any) => {
     // Create client
-    const client = googleAuth.fromJSON(credentials) as Client;
-    client.scopes = ['https://www.googleapis.com/auth/cloud-platform']
+    const client = auth.fromJSON(credentials) 
+    if (client instanceof JWT) {
+        client.scopes = ['https://www.googleapis.com/auth/cloud-platform']
+    }
+    
     // Authenticate from credentials
     const vertex = createVertex({ googleAuthOptions: { authClient: client } });
 

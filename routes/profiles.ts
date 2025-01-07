@@ -1,16 +1,22 @@
 const router = require('express').Router();
 const { body, param } = require('express-validator');
 
+// Types
 const { ResultCode } = require('@/utils/result')
 
-// Get error report middleware
-const reportValidationError = require('@/utils/report-validation-error');
-
-// Get authentication middleware
-const isAuthenticated = require('@/utils/check-session');
+// Get validators
+const isAuthenticated = require('@/utils/validation/check-session'); // Get authentication middleware
+const reportValidationError = require('@/utils/validation/report-validation-error'); // Get error report middleware
 
 // Get Redis function
-const { getClient, getKeyName, createRelationalRecord, deleteRelationalRecord, getRelationalRecord, getRelationalRecords } = require("@/database/redis");
+const { 
+    getClient, 
+    getKeyName, 
+    createRelationalRecord, 
+    deleteRelationalRecord, 
+    getRelationalRecord, 
+    getRelationalRecords 
+} = require("@/database/redis");
 
 // Get Redis client
 const redis = getClient();
@@ -21,7 +27,9 @@ router.post(
     [
         isAuthenticated,
         body().isObject(),
-        body('profileName').isString({ min: 1, message: "Profile name is required" }),
+        body('profileName', "Profile name is required")
+            .isString()
+            .isLength({ min: 1 }),
         reportValidationError,
     ],
     async (req, res) => {
@@ -70,7 +78,9 @@ router.get(
     '/profile/:profileId',
     [
         isAuthenticated,
-        param('profileId').isString({ min: 1 }),
+        param('profileId')
+            .isString()
+            .isLength({ min: 1 }),
         reportValidationError,
     ],
     async (req, res) => {
@@ -94,7 +104,9 @@ router.delete(
     '/profile/:profileId',
     [
         isAuthenticated,
-        param('profileId').isString({ min: 1 }),
+        param('profileId')
+            .isString()
+            .isLength({ min: 1 }),
         reportValidationError,
     ],
     async (req, res) => {
@@ -113,11 +125,16 @@ router.delete(
 router.put(
     '/profile/:profileId/preference',
     [
-        param('profileId').isString({ min: 1 }),
+        param('profileId')
+            .isString()
+            .isLength({ min: 1 }),
         body().isObject(),
-        body('lifestyle').isString(), // TODO: Check as enum
-        body('allergen').isString(), // TODO: Check as enum
-        body('other').isString(),
+        body('lifestyle') // TODO: Check as enum
+            .isString(), 
+        body('allergen') // TODO: Check as enum
+            .isString(), 
+        body('other')
+            .isString(),
         reportValidationError,
     ],
     async (req, res) => {
@@ -144,7 +161,9 @@ router.put(
 router.get(
     '/profile/:profileId/preference',
     [
-        param('profileId').isString({ min: 1 }),
+        param('profileId')
+            .isString()
+            .isLength({ min: 1 }),
         reportValidationError,
     ],
     async (req, res) => {

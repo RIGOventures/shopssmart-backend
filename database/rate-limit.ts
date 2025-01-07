@@ -6,8 +6,6 @@ interface UserRequestData {
 	lastResetTime: number;
 }
 
-const { ResultCode } = require('@/utils/result')
-
 // Get Redis function
 const { getClient } = require("@/database/redis");
 
@@ -57,13 +55,7 @@ export async function rateLimit(userIP: string) {
 		}
 
 		// Check if the user has exceeded the rate limit (5 requests per day)
-		if (count >= MAX_REQUESTS) {
-			// TODO: Error code 420:
-			return {
-				type: 'error',
-				resultCode: ResultCode.RateLimited
-			}
-		}
+		if (count >= MAX_REQUESTS) return true
 
 		// Increment the request count for the user
 		userRequests.count++;
