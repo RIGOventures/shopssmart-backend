@@ -1,12 +1,13 @@
 const Redis = require('ioredis');
+require('dotenv').config();  // Load .env variables
 
-// Create client & connect to Redis
 const redis = new Redis({
-    username: process.env.REDIS_USERNAME,
-    password: process.env.REDIS_PASSWORD,
-    host: process.env.REDIS_HOST,
-    port: parseInt(process.env.REDIS_PORT!),
+    username: process.env.REDIS_USERNAME || undefined,
+    password: process.env.REDIS_PASSWORD || undefined,
+    host: process.env.REDIS_HOST || '127.0.0.1',
+    port: Number(process.env.REDIS_PORT) || 6379,  // Added fallback to 6379
 });
+
 
 // Convert a list of indexes to an index key
 const getKeyName = (...args) => `${args.join(':')}`
