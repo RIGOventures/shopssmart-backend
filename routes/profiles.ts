@@ -8,18 +8,10 @@ const { ResultCode } = require('@/utils/result')
 const isAuthenticated = require('@/utils/validation/check-session'); // Get authentication middleware
 const reportValidationError = require('@/utils/validation/report-validation-error'); // Get error report middleware
 
-// Get Redis function
-const { 
-    getClient, 
-    getKeyName, 
-    createRelationalRecord, 
-    deleteRelationalRecord, 
-    getRelationalRecord, 
-    getRelationalRecords 
-} = require("@/database/redis");
-
-// Get Redis client
-const redis = getClient();
+// Get User model
+const User = require("@/models/User");
+// Get Profile model
+const Profile = require("@/models/Profile");
 
 // Create profile
 router.post(
@@ -33,26 +25,19 @@ router.post(
         reportValidationError,
     ],
     async (req, res) => {
+        const { profileName } = req.body;
+
         // Get session
         const { userId } = req.session;
 
-        // Get profile name
-        const { profileName } = req.body;
- 
-        // Create id
-        const profileId = crypto.randomUUID()
-
         // Create profile
-        const profile = {
-            id: profileId,
-            name: profileName,
-            userId,
-        }
+        const [result, profile] = await Profile.create(profileName, userId)
 
-        await createRelationalRecord('profiles', profile)
+        // Link profile
+        await User.linkForeignRecord(userId, 'profiles', profile)
 
+        // Return result
         res.status(200).json(profile);
-
     }
 );
 
@@ -67,8 +52,10 @@ router.get(
         // Get session
         const { userId } = req.session;
 
-        const profiles = await getRelationalRecords('profiles', userId)
+        // Get profiles
+        const profiles = await User.getForeignRecords(userId, 'profiles')
 
+        // Return result
         res.status(200).json(profiles);
     }
 );
@@ -84,18 +71,20 @@ router.get(
         reportValidationError,
     ],
     async (req, res) => {
+        const { profileId } = req.params;
+
         // Get session
         const { userId } = req.session;
 
-        const { profileId } = req.params;
-
-        const profile = await getRelationalRecord('profiles', profileId, userId)
-        if (profile) {
-            res.status(200).json(profile);
-        } else {
+        // Get record
+        const profile = await User.getForeignRecord(userId, 'profiles', profileId)
+        if (!profile) {
             res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
+            return
         }
-
+            
+        // Return result
+        res.status(200).json(profile);
     }
 );
 
@@ -110,13 +99,15 @@ router.delete(
         reportValidationError,
     ],
     async (req, res) => {
+        const { profileId } = req.params;
+
         // Get session
         const { userId } = req.session;
 
-        const { profileId } = req.params;
+        // Delete record
+        await User.deleteForeignRecord(userId, 'profiles', profileId)
 
-        await deleteRelationalRecord('profiles', profileId, userId)
-
+        // Return result
         res.send("OK");
     }
 );
@@ -138,21 +129,13 @@ router.put(
         reportValidationError,
     ],
     async (req, res) => {
-        // Create profile Id
         const { profileId } = req.params;
-        const preferenceKey = getKeyName('profiles', 'preferences', profileId);
-
-        // Create preference
         const { lifestyle, allergen, other } = req.body;
-        const pref = {
-            lifestyle: lifestyle,
-            allergen: allergen,
-            other: other,
-            profileId: profileId
-        } 
 
-        await redis.hset(preferenceKey, pref)
+        // Link preference
+        await Profile.setPreferences(profileId, lifestyle, allergen, other)
 
+        // Return result
         res.status(200).json({ resultCode: ResultCode.ProfileUpdated });
     }
 );
@@ -167,13 +150,13 @@ router.get(
         reportValidationError,
     ],
     async (req, res) => {
-        // Get primary key
         const { profileId } = req.params;
-        const preferenceKey = getKeyName('profiles', 'preferences', profileId);
+        
+        // Get preference
+        const preference = await Profile.getPreferences(profileId)
 
-        const pref = await redis.hgetall(preferenceKey)
-            
-        res.status(200).json(pref);
+        // Return result
+        res.status(200).json(preference);
     }
 );
 

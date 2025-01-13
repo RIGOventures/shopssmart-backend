@@ -4,9 +4,22 @@ import { ResultCode } from '@/utils/result'
 
 export interface User {
     id: string
+    username?: string
     email: string
     password: string
     profileId?: string
+}
+
+export interface Profile {
+    id: string
+    name: string
+    userId: string
+}
+
+export interface Preferences {
+    lifestyle: string, 
+    allergen: string, 
+    other?: string
 }
 
 export type Message = {
@@ -18,22 +31,11 @@ export interface Chat {
     id: string
     title: string
     createdAt: Date
+    updatedAt: Date
     path?: string
-    messages: Message[] // Is stored as a string
+    messages: Message[] // Is stored as a string!
     sharePath?: string
-}
-
-export interface Profile {
-    id: string
-    name: string
     userId: string
-}
-
-export interface Preferences {
-    lifestyle?: string, 
-    allergen?: string, 
-    other?: string,
-    profileId: string
 }
 
 export interface Session {

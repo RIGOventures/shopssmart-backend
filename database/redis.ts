@@ -63,81 +63,9 @@ const performSearch = async (index: string, ...query) => {
     }
 };
 
-// Set a record and link to a user 
-const createRelationalRecord = async (index: string, record: { id: string, userId: string }) => {
-    const pipeline = redis.pipeline()
-    
-    // Set to the primary key
-    const primaryKey = getKeyName(index, record.id)
-    pipeline.hset(primaryKey, record)
-    
-    // Set to foreign key
-    const foreignKey = getKeyName('users', index, record.userId)
-    pipeline.zadd(foreignKey, Date.now(), primaryKey)
-
-    await pipeline.exec()
-}
-
-const getRelationalRecord = async (index: string, id: string, userId: string) => {
-    // Set to the primary key
-    const primaryKey = getKeyName(index, id)
-
-    // Get the record
-    const record = await redis.hgetall(primaryKey)
-
-    // If empty list key does not exist. 
-    if (record == undefined || Object.keys(record).length < 1) {
-        throw new Error(`${primaryKey} does not exist`)
-    }
-
-    // Compare with session.userId
-    if (record.userId != userId) {
-        throw new Error('Unauthorized')
-    }
-
-    return record
-}
-
-// Delete a record
-const deleteRelationalRecord = async (index: string, id: string, userId: string) => {
-    // Get record
-    const record = await getRelationalRecord(index, id, userId)
-
-    // Delete the record
-    const primaryKey = getKeyName(index, record.id)
-    await redis.del(primaryKey)
-
-    // Remove the foreign key
-    const foreignKey = getKeyName('users', index, record.userId)
-    await redis.zrem(foreignKey, primaryKey)
-}
-
-const getRelationalRecords = async (index: string, userId: string) => {
-    const pipeline = redis.pipeline()
-
-    // Fetch all the records stored with the user in reverse order
-    const foreignKey = getKeyName('users', index, userId)
-    const records: string[] = await redis.zrange(foreignKey, 0, -1, 'REV')
-
-    // Get all records saved
-    for (const record of records) {
-        pipeline.hgetall(record)
-    }
-
-    const results = await pipeline.exec()
-    
-    // Flatten and filter results
-    const filtered = results.flat().filter(function (el) { return el != null; });
-    return filtered
-}
-
 // Export functions
 module.exports = {
     getClient: () => redis,
     getKeyName,
-    performSearch,
-    createRelationalRecord,
-    getRelationalRecord,
-    deleteRelationalRecord, 
-    getRelationalRecords
+    performSearch
 };

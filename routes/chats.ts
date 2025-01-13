@@ -6,62 +6,18 @@ const { ResultCode } = require('@/utils/result')
 
 const { pipeline } = require("node:stream/promises");
 
-const { convertToCoreMessages } = require('ai');
-
 // Get validators
 const isAuthenticated = require('@/utils/validation/check-session'); // Get authentication middleware
 const rateLimit = require('@/utils/validation/rate-limit'); // Get authentication middleware
 const reportValidationError = require('@/utils/validation/report-validation-error'); // Get error report middleware
 
-// Get Redis function
-const { 
-    getClient, 
-    getKeyName, 
-    createRelationalRecord, 
-    deleteRelationalRecord, 
-    getRelationalRecord, 
-    getRelationalRecords 
-} = require("@/database/redis");
-
-// Get Redis client
-const redis = getClient();
+// Get User model
+const User = require("@/models/User");
+// Get Chat model
+const Chat = require("@/models/Chat");
 
 // Get AI mode
 const { submitPrompt } = require("@/model/vertex");
-
-// Create chat
-const saveChat = async (req, res) => {
-    // Get session
-    const { userId } = req.session;
-
-    // Get chat generation request details
-    const { chatId } = req.params;
-
-    // Get messages
-    const { messages } = req.body;
-    const coreMessages = await convertToCoreMessages(messages);
-    // const latestMessageContent = coreMessages[coreMessages.length - 1].content as string;
-
-    // Create title
-    const firstMessageContent = coreMessages[0].content as string;
-    const title = firstMessageContent.substring(0, 100);
-
-    // Get path
-    // const path = `/list/${chatId}`;
-
-    // Create chat
-    const chat = {
-        id: chatId,
-        createdAt: new Date(),
-        messages: JSON.stringify(coreMessages),
-        title,        
-        userId,
-    };
-    
-    await createRelationalRecord('chats', chat)
-
-    return chat
-}
 
 // Create a chat
 router.post(
@@ -73,13 +29,18 @@ router.post(
         reportValidationError,
     ],
     async (req, res) => {
-        // Create id
-        const chatId = crypto.randomUUID()
-        req.params.chatId = chatId
+        const { messages } = req.body;
 
-        // Save chat
-        await saveChat(req, res)
+        // Get session
+        const { userId } = req.session;
 
+        // Create chat
+        const [result, chat] = await Chat.create(messages, userId)
+
+        // Create chat
+        await User.linkForeignRecord(userId, 'chats', chat)
+
+        // Return results
         res.status(200).json({ resultCode: ResultCode.ChatCreated })
     }
 );
@@ -95,8 +56,13 @@ router.get(
         // Get session
         const { userId } = req.session;
 
-        const chats = await getRelationalRecords('chats', userId)
+        // Get chats
+        const chats = await User.getForeignRecords(userId, 'chats')
+        chats.map((chat) => {
+            chat['messages'] = JSON.parse(chat['messages'])
+        });
 
+        // Return result
         res.status(200).json(chats);
     }
 );
@@ -112,27 +78,11 @@ router.delete(
         // Get session
         const { userId } = req.session;
 
-        // Fetch all the records stored with the user
-        const foreignKey = getKeyName('users', 'chats', userId)
-        const chats: string[] = await redis.zrange(foreignKey, 0, -1)
-        if (!chats.length) {
-            res.status(200).json({ resultCode: ResultCode.ChatUpdated });
-            return
-        }
+        // Delete records
+        await User.deleteForeignRecords(userId, 'chats')
 
-        // Start pipeline
-        const pipeline = redis.pipeline()
-
-        // Get all chats saved
-        for (const chat of chats) {
-            pipeline.del(chat)
-            pipeline.zrem(foreignKey, chat)
-        }
-
-        await pipeline.exec()
-
+        // Return result
         res.status(200).json({ resultCode: ResultCode.ChatUpdated });
-
     }
 );
 
@@ -147,35 +97,23 @@ router.get(
         reportValidationError,
     ],
     async (req, res) => {
-        // Get session
-        const { userId } = req.session;
-
         const { chatId } = req.params;
 
-        const chat = await getRelationalRecord('chats', chatId, userId)
-        if (chat) {
-            res.status(200).json(chat);
-        } else {
+        // Get session
+        const { userId } = req.session;
+        
+        // Get record
+        const chat = await User.getForeignRecord(userId, 'chats', chatId)
+        if (!chat) {
             res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
+            return
         }
+        chat['messages'] = JSON.parse(chat['messages'])
 
+        // Return result
+        res.status(200).json(chat);
     },
 );
-
-
-// Get preferences
-const getPreferences = async (userId: number) => {
-   // Get user
-   const userKey = getKeyName('users', userId);
-   const existingUser = await redis.hgetall(userKey);
-
-   // Get key
-   const profileId = existingUser.profileId
-   const preferenceKey = getKeyName('profiles', profileId, 'preferences');
-
-   // Get preferences
-   return await redis.hgetall(preferenceKey)
-}
 
 // Update a chat
 router.post(
@@ -193,44 +131,42 @@ router.post(
         reportValidationError,
     ],
     async (req, res) => {
+        const { chatId } = req.params;
+        const { content } = req.body;
+
         // Get session
         const { userId } = req.session;
 
-        // Get chat
-        const { chatId } = req.params;
-        const existingChat = await getRelationalRecord('chats', chatId, userId);
-
-        // Get messages
-        const { content } = req.body;
-
         // Get user preferences
-        const preferences = await getPreferences(userId)
+        const existingUser = await User.findById(userId);
+        const profile = await User.getProfile(existingUser)
+        
+        // Get chat
+        const chat = await User.getForeignRecord(userId, 'chats', chatId);
+        chat['messages'] = JSON.parse(chat['messages'])
 
         // Handle on finish
         async function onFinish({ text }: { text: string }) {
-
-            // Get current messages
-            const messages = JSON.parse(existingChat.messages)
-            // Get response message
+            // Get message
             const responseMessages = [ { role: 'assistant', content: text } ]
+            // Append to messages
+            const chatMessages = [...chat['messages'], ...responseMessages];
 
-            // Append to chat messages
-            const chatMessages = [...messages, ...responseMessages];
-            req.body.messages = chatMessages // Add to body
-            
             // Save chat
-            await saveChat(req, res)
-
+            await Chat.updateOne({ id: chatId }, {
+                updatedAt: new Date(),
+                messages: chatMessages,      
+            })
+            
             // End stream
             res.end(text)
         }
 
         // Submit message
-        const streamResponse = await submitPrompt(content, preferences, onFinish)
+        const streamResponse = await submitPrompt(content, profile.preference, onFinish)
 
         // Pipe stream to response!
         await pipeline(streamResponse.body, res);
-
     }
 )
 
@@ -245,14 +181,15 @@ router.delete(
         reportValidationError,
     ],
     async (req, res) => {
+        const { chatId } = req.params;
+
         // Get session
         const { userId } = req.session;
 
-        // Get chat
-        const { chatId } = req.params;
+        // Delete record
+        await User.deleteForeignRecord(userId, 'chats', chatId)
 
-        await deleteRelationalRecord('chats', chatId, userId)
-
+        // Return result
         res.send("OK");
     }
 );
@@ -268,24 +205,21 @@ router.put(
         reportValidationError,
     ],
     async (req, res) => {
+        const { chatId } = req.params;
+
         // Get session
         const { userId } = req.session;
 
         // Get chat
-        const { chatId } = req.params;
-        const chat = await getRelationalRecord('chats', chatId, userId)
+        const chat = await User.getForeignRecord(userId, 'chats', chatId)
 
         // Update chat
-        const payload = {
-            ...chat,
-            sharePath: `/share/${chat.id}`
-        }
+        await Chat.updateOne({ id: chat.id }, {
+            sharePath: `/share/${chat.id}`,      
+        })
 
-        const chatKey = getKeyName('chats', chat.id)
-
-        await redis.hset(chatKey, payload)
-
-        res.status(200).json(payload);
+        // Return result
+        res.status(200).json(`/share/${chat.id}`);
     }
 );
 
@@ -299,16 +233,15 @@ router.get(
         reportValidationError,
     ],
     async (req, res) => {
-        // Get chat
         const { chatId } = req.params;
-        const chatKey = getKeyName('chats', chatId)
 
-        const chat = await redis.hgetall(chatKey)
+        const chat = await Chat.findById(chatId)
         if (!chat || !chat.sharePath) {
             res.status(400).json({ resultCode: ResultCode.InvalidCredentials })
             return
         }
 
+        // Return result
         res.status(200).json(chat);
     }
 );

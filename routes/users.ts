@@ -4,52 +4,16 @@ const { body, param } = require('express-validator');
 // Types
 const { ResultCode } = require('@/utils/result')
 
-const bcrypt = require('bcrypt')
-
 // Sensitive fields
 const SENSITIVE_FIELD_NAMES = ['password'];
-
-// Remove sensitive fields
-const removeSensitiveFields = require('@/utils/remove-sensitive-fields');
 
 // Get validators
 const reportValidationError = require('@/utils/validation/report-validation-error'); // Get error report middleware
 
-// Get Redis function
-const { 
-    getClient, 
-    getKeyName, 
-    performSearch, 
-    getRelationalRecord 
-} = require("@/database/redis");
-
-// Get Redis client
-const redis = getClient();
-
-// Create user
-const createUser = async (req, res) => {
-    // Get body
-    const { email, password } = req.body;
-
-    // Encrypy password
-    const saltRounds = 10; // Typically a value between 10 and 12
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
-
-    // Create id
-    const userId = crypto.randomUUID()
-    const userKey = getKeyName('users', userId)
-
-    // Create user
-    const user = {
-        id: userId,
-        email,
-        password: hashedPassword
-    } 
-
-    await redis.hset(userKey, user)
-
-    return res.status(200).json({ resultCode: ResultCode.UserCreated })
-}
+// Get User model
+const User = require("@/models/User");
+// Get Profile model
+const Profile = require("@/models/Profile");
 
 // Create a user.
 router.post(
@@ -60,13 +24,8 @@ router.post(
             .isEmail()
             .trim()
             .custom(async value => {
-                // Format email address usable by Redis (do not save this!)
-                const emailAddress = value.replace(/\./g, '\\.').replace(/\@/g, '\\@');
-
-                // Search using the formatted email
-                const searchResults = await performSearch(getKeyName('users', 'idx'), `@email:{${emailAddress}}`);
-                if (searchResults.length >= 1) {
-                    // TODO: Send result code { resultCode: ResultCode.UserAlreadyExists }
+                const results = await User.find({ email: value })
+                if (results.length >= 1) {
                     throw new Error('E-mail already in use');
                 }
             }),
@@ -76,7 +35,16 @@ router.post(
             .isLength({ min: 6 }),
         reportValidationError,
     ],
-    createUser
+    async (req, res) => {
+        // Get body
+        const { email, password } = req.body;
+    
+        // Create user
+        await User.create(email, password)
+    
+        // Return success
+        return res.status(200).json({ resultCode: ResultCode.UserCreated })
+    }
 );
 
 // Get users
@@ -86,43 +54,15 @@ router.get(
         reportValidationError,
     ],
     async (req, res) => {
-    
-        // Fetch all the keys that match the mask
-        const userMask = getKeyName('users', "*")
-         
-        const userKeys: string[] = []
-
-        let cursor = 0
-        do {
-            const result = await redis.scan(cursor, 'MATCH', userMask)
-            // Update cursor
-            cursor = result[0]
-
-            // Append user keys
-            const resultKeys = result[1]
-            userKeys.push(...resultKeys)
-        } while (cursor != 0)
-
-        // Start pipeline
-        const pipeline = redis.pipeline()
-
-        // Get all users saved
-        for (const userKey of userKeys) {
-            pipeline.hgetall(userKey)
-        }
-
-        const results = await pipeline.exec()
-
-        // Flatten and filter results
-        const filtered = results.flat()
-            .filter(function (el) { return el != null; })
-            .filter(function (el) { return el["command"] == null; });
+        // Get users
+        const results = await User.find()
 
         // Remove sensitive fields
         SENSITIVE_FIELD_NAMES.map((fieldName) =>
-            filtered.forEach(function(existingUser){ delete existingUser[fieldName] }));
+            results.forEach(function(existingUser){ delete existingUser[fieldName] }));
 
-        res.status(200).json(filtered);
+        // Return filtered user
+        res.status(200).json(results);
     }
 );
 
@@ -137,10 +77,10 @@ router.get(
     ],
     async (req, res) => {
         const { userId } = req.params;
-        const userKey = getKeyName('users', userId);
-
-        const existingUser = await redis.hgetall(userKey);
-        if (!existingUser || Object.keys(existingUser).length < 1) {
+        
+        // Find user
+        const existingUser = await User.findById(userId)
+        if (!existingUser) {
             res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
             return
         }
@@ -148,8 +88,8 @@ router.get(
         // Remove sensitive fields
         SENSITIVE_FIELD_NAMES.map((fieldName) => delete existingUser[fieldName]);
 
+        // Return filtered user
         res.status(200).json(existingUser);
-        
     },
 );
 
@@ -165,19 +105,22 @@ router.get(
         // Get parameters
         const { email } = req.params;
 
-        // Format email address usable by Redis (do not save this!)
-        const emailAddress = email.replace(/\./g, '\\.').replace(/\@/g, '\\@');
+        // Get user
+        const existingUser = await User.findOne({ email: email })
+        if (!existingUser) {
+            res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
+            return
+        }
 
-        const searchResults = await performSearch(getKeyName('users', 'idx'), `@email:{${emailAddress}}`);
-        const response = searchResults.length === 1
-            ? removeSensitiveFields(searchResults, ...SENSITIVE_FIELD_NAMES)[0]
-            : searchResults;
+        // Remove sensitive fields
+        SENSITIVE_FIELD_NAMES.map((fieldName) => delete existingUser[fieldName]);
 
-        res.status(200).json(response);
+        // Return filtered user
+        res.status(200).json(existingUser);
     },
 );
 
-// Create a user.
+// Delete a user.
 router.delete(
     '/user/:userId',
     [
@@ -188,17 +131,15 @@ router.delete(
     ],
     async (req, res) => {
         const { userId } = req.params;
-        const userKey = getKeyName('users', userId);
-
-        const existingUser = await redis.hgetall(userKey);
-        if (!existingUser || Object.keys(existingUser).length < 1) {
+        
+        // Delete user
+        const result = await User.deleteOne({ id: userId })
+        if (result == 0){
             res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
             return
         }
-
-        // Delete the record
-        await redis.del(userKey)
-
+        
+        // Return result
         res.status(200).json({ resultCode: ResultCode.UserUpdated });
     }
 );
@@ -209,7 +150,13 @@ router.put(
     [
         param('userId')
             .isString()
-            .isLength({ min: 1 }),
+            .isLength({ min: 1 })
+            .custom(async value => {
+                const results = User.find({ id: value })
+                if (results.length == 0) {
+                    throw new Error(`Failed login attempt for ${value}.`);
+                }
+            }),
         body().isObject(),
         body('profileId')
             .isString()
@@ -217,29 +164,20 @@ router.put(
         reportValidationError,
     ],
     async (req, res) => {
-        // Get session
         const { userId } = req.params;
-        const userKey = getKeyName('users', userId);
+        const { profileId } = req.body;
 
         // Get profile (to ensure it exists)
-        const { profileId } = req.params;
-        const profile = await getRelationalRecord('profiles', profileId, userId)
-
-        // Check 
-        const existingUser = await redis.hgetall(userKey);
-        if (!existingUser || Object.keys(existingUser).length < 1) {
+        const profile = await Profile.findById(profileId)
+        if (!profile) {
             res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
             return
         }
 
         // Update user
-        const user = {
-            ...existingUser,
-            profileId: profile.id
-        } 
+        await User.updateOne({ id: userId }, { profileId: profile.id })
 
-        await redis.hset(userKey, user)
-
+        // Return result
         res.status(200).json({ resultCode: ResultCode.UserUpdated });
     }
 );
@@ -254,23 +192,21 @@ router.get(
         reportValidationError,
     ],
     async (req, res) => {
-
         const { userId } = req.params;
-        const userKey = getKeyName('users', userId);
 
-        const existingUser = await redis.hgetall(userKey);
-        if (!existingUser || Object.keys(existingUser).length < 1) {
+        // Find user
+        const existingUser = await User.findById(userId)
+        if (!existingUser) {
             res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
             return
         }
 
-        // TODO: Get the profileId field from the user hash whose key is in userKey.
-        // Check out the HMGET command... https://redis.io/commands/hmget
-        res.status(200).json({ profileId: existingUser.profileId || 'default' });
+        // Create preference
+        const preference = await User.getProfile(existingUser)
+
+        // Return profile
+        res.status(200).json(preference);
     }
 );
 
 module.exports = router;
-
-// Append other functions as named export
-module.exports.createUser = createUser

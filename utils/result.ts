@@ -17,7 +17,6 @@ export enum ResultCode {
     // Chat
     ChatCreated         = 'CHAT_CREATED',
     ChatUpdated         = 'CHAT_UPDATED',
-
 }
   
 export const getMessageFromCode = (resultCode: string) => {

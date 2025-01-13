@@ -4,19 +4,11 @@ const { body, param } = require('express-validator');
 // Types
 const { ResultCode } = require('@/utils/result')
 
-const bcrypt = require('bcrypt')
-
 // Get validators
 const reportValidationError = require('@/utils/validation/report-validation-error'); // Get error report middleware
 
-// Get Redis function
-const { 
-    performSearch, 
-    getKeyName 
-} = require("@/database/redis");
-
-// Get Redis function
-const { createUser } = require("@/routes/users");
+// Get User model
+const User = require("@/models/User");
 
 // Signup user
 router.post(
@@ -27,42 +19,9 @@ router.post(
             .isEmail()
             .trim()
             .custom(async value => {
-                // Format email address usable by Redis (do not save this!)
-                const emailAddress = value.replace(/\./g, '\\.').replace(/\@/g, '\\@');
-
-                // Search using the formatted email
-                const searchResults = await performSearch(getKeyName('users', 'idx'), `@email:{${emailAddress}}`);
-                if (searchResults.length >= 1) {
-                    // TODO: Send result code { resultCode: ResultCode.UserAlreadyExists }
-                    throw new Error('E-mail already in use');
-                }
-            }),
-        body('password')
-            .isString()
-            .trim()
-            .isLength({ min: 6 }),
-        reportValidationError,
-    ],
-    createUser
-);
-
-// Authenticates credentials against database
-router.post(
-    '/login',
-    [
-        body().isObject(),
-        body('email')
-            .isEmail()
-            .trim()
-            .custom(async value => {
-                // Format email address usable by Redis (do not save this!)
-                const emailAddress = value.replace(/\./g, '\\.').replace(/\@/g, '\\@');
-
-                // Search using the formatted email
-                const searchResults = await performSearch(getKeyName('users', 'idx'), `@email:{${emailAddress}}`);
-                if (searchResults.length == 0) {
-                    // TODO: Send result code { resultCode: ResultCode.InvalidCredentials }
-                    throw new Error(`Failed login attempt for ${value}.`);
+                const results = await User.find({ email: value })
+                if (results.length >= 1) {
+                    throw new Error(`E-mail ${value} already in use`);
                 }
             }),
         body('password')
@@ -74,44 +33,70 @@ router.post(
     async (req, res) => {
         // Get body
         const { email, password } = req.body;
-        
-        // Format email address usable by Redis (do not save this!)
-        const emailAddress = email.replace(/\./g, '\\.').replace(/\@/g, '\\@');
+    
+        // Create user
+        await User.create(email, password)
+    
+        // Return success
+        return res.status(200).json({ resultCode: ResultCode.UserCreated })
+    }
+);
 
-        // Search for user by email
-        const searchResults = await performSearch(getKeyName('users', 'idx'), `@email:{${emailAddress}}`)
+// Authenticates credentials against database
+router.post(
+    '/login',
+    [
+        body().isObject(),
+        body('email')
+            .isEmail()
+            .trim()
+            .custom(async value => {
+                const searchResults = await User.find({ email: value })
+                if (searchResults.length == 0) {
+                    throw new Error(`Failed login attempt for ${value}.`);
+                }
+            }),
+        body('password')
+            .isString()
+            .trim()
+            .isLength({ min: 6 }),
+        reportValidationError,
+    ],
+    async (req, res) => {
+        const { email, password } = req.body;
+
         // Get user
-        const existingUser = searchResults[0]
+        const existingUser = await User.findOne({ email: email })
+
+        // TODO: Get specific field from a hash.
+        // Check out the HMGET command... https://redis.io/commands/hmget
 
         // See if the correct password for this email was provided...
-        const passwordCorrect = await bcrypt.compare(password, existingUser.password);
-        if (passwordCorrect) {
-            console.log(`> Login user ${email}.`);
+        const passwordCorrect = await User.validatePassword(existingUser, password);
+        if (!passwordCorrect) {
+            // Remove any session this user previously had.
+            req.session.destroy();
 
-            // Add session
-            req.session.userId = existingUser.id;
-            req.session.email = existingUser.email;
+            const message = `Failed login attempt for ${email}.`
+            console.log(message);
 
-            // Redirect?
-            res.status(200).json({
-                type: 'success',
-                resultCode: ResultCode.UserLoggedIn
+            res.status(401).json({ 
+                type: 'error',
+                resultCode: ResultCode.InvalidCredentials,
+                message: message
             })
             return 
         }
 
-        // Remove any session this user previously had.
-        req.session.destroy();
-
-        const message = `Failed login attempt for ${email}.`
+        const message = `> Login user ${email}.`
         console.log(message);
 
-        res.status(401).json({ 
-            type: 'error',
-            resultCode: ResultCode.InvalidCredentials,
-            message: message
-        })
+        // Add session
+        req.session.userId = existingUser.id;
+        req.session.email = existingUser.email;
 
+        // Return result
+        res.status(200).json({ resultCode: ResultCode.UserLoggedIn })
     },
 );
   
@@ -124,10 +109,10 @@ router.get(
         const { email } = session;
     
         // Destroy the session
-        session.destroy((e) => {
-            if (e) {
+        session.destroy((err) => {
+            if (err) {
                 console.log('Error performing logout:');
-                console.log(e);
+                console.log(err);
                 return
             }
 

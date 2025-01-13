@@ -10,6 +10,9 @@ const reportValidationError = (req, res, next) => {
             errors: errors.array() ,
             resultCode: ResultCode.UnknownError
         });
+
+        // TODO: Send result code { resultCode: ResultCode.InvalidCredentials }
+        // TODO: Send result code { resultCode: ResultCode.UserAlreadyExists }
     }
 
     return next();
