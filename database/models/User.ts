@@ -1,3 +1,34 @@
+/**
+ * @swagger
+ * components:
+ *  schemas:
+ *      User:
+ *          type: object
+ *          required:
+ *              - email
+ *              - password
+ *          properties:
+ *              id:
+ *                  type: string
+ *                  description: The auto-generated id of the user
+ *              username:
+ *                  type: string
+ *                  description: The username of the user
+ *              email:
+ *                  type: string
+ *                  description: The email of the user
+ *              password:
+ *                  type: string
+ *                  description: The password of the user
+ *              profileId:
+ *                  type: string
+ *                  description: The foreign key of a profile
+ *          example:
+ *              id: 410544b2-4001-4271-9855-fec4b6a6442a
+ *              email: user-family@test.com
+ *              password: LongTestPassword
+ */
+
 // Get Redis functions
 const { 
     getClient,  
@@ -169,25 +200,34 @@ const validatePassword = async function(user: User, password: string) {
 }
 User.prototype.validatePassword = validatePassword
 
-// Get profile + preferences.
+// Get profile
 const getProfile = async function(user: User) {
     // Get key
     const profileId = user.profileId
     if (!profileId) {
+        return
+    }
+
+    // Get profile
+    const profile = await Profile.findById(profileId)
+    // Return result
+    return profile
+}   
+User.prototype.getProfile = getProfile
+
+// Get profile + preferences.
+const getPreferences = async function(user: User) {
+    // Get profile
+    const profile = await getProfile(user)
+    if (!profile) {
         return PREFERENCE_TEMPLATE
     }
 
     // Get preference
-    const profile = await Profile.findById(profileId)
-    // Get preference
     const preference = await Profile.getPreferences(profile.id)
-
     // Return result
-    return {
-        ...profile,
-        preference: preference
-    }
+    return preference
 }   
-User.prototype.getProfile = getProfile
+User.prototype.getPreferences = getPreferences
 
 module.exports = new User(MODEL_KEY)

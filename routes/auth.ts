@@ -1,3 +1,29 @@
+/**
+ * @swagger
+ * tags:
+ *  name: Auth
+ *  description: User authentication and login
+ */
+
+/**
+ * @swagger
+ * definitions:
+ *  Login:
+ *      required:
+ *          - email
+ *          - password
+ *      properties:
+ *          email: 
+ *              type: string
+ *          password:
+ *              type: string
+ *          path:
+ *              type: string
+ *      example:
+ *          email: user@test.com
+ *          password: password
+ */
+
 const router = require('express').Router();
 const { body, param } = require('express-validator');
 
@@ -10,7 +36,28 @@ const reportValidationError = require('@/utils/validation/report-validation-erro
 // Get User model
 const User = require("@/models/User");
 
-// Signup user
+/**
+ * @swagger
+ * /signup:
+ *  post:
+ *      summary: Signup a user
+ *      tags: [Auth]
+ *      requestBody:
+ *          required: true
+ *          content:
+ *              application/json:
+ *                  schema:
+ *                      type: object
+ *                      $ref: '#/definitions/Login'
+ *      responses:
+ *          201:
+ *              description: The response code
+ *              content:
+ *                  text/plain:
+ *                      type: string
+ *          400:
+ *              description: The email is alrady in use
+ */
 router.post(
     '/signup',
     [
@@ -38,11 +85,34 @@ router.post(
         await User.create(email, password)
     
         // Return success
-        return res.status(200).json({ resultCode: ResultCode.UserCreated })
+        return res.status(201).json({ resultCode: ResultCode.UserCreated })
     }
 );
 
-// Authenticates credentials against database
+/**
+ * Authenticates credentials against database
+ * @swagger
+ * /login:
+ *  post:
+ *      summary: Login a user
+ *      description: Login to the application
+ *      tags: [Auth]
+ *      requestBody:
+ *          required: true
+ *          content:
+ *              application/json:
+ *                  schema:
+ *                      type: object
+ *                      $ref: '#/definitions/Login'
+ *      responses:
+ *          200:
+ *              description: Login successful
+ *              schema:
+ *                  type: object
+ *                  $ref: '#/definitions/Login'
+ *          401:
+ *              description: Failed login attempt
+ */
 router.post(
     '/login',
     [
@@ -100,8 +170,21 @@ router.post(
     },
 );
   
-// Logout
-router.get(
+/**
+ * @swagger
+ * /logout:
+ *  delete:
+ *      summary: Logout a user
+ *      description: Logout of the application
+ *      tags: [Auth]
+ *      responses:
+ *          200:
+ *              description: OK
+ *              content:
+ *                  text/plain:
+ *                      type: string
+ */
+router.delete(
     '/logout',
     (req, res) => {
         // Get session

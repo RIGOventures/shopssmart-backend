@@ -1,3 +1,10 @@
+/**
+ * @swagger
+ * tags:
+ *  name: Users
+ *  description: User administration
+ */
+
 const router = require('express').Router();
 const { body, param } = require('express-validator');
 
@@ -15,7 +22,29 @@ const User = require("@/models/User");
 // Get Profile model
 const Profile = require("@/models/Profile");
 
-// Create a user.
+/**
+ * @swagger
+ * /user:
+ *  post:
+ *      summary: Create a user
+ *      tags: [Users]
+ *      requestBody:
+ *          required: true
+ *          content:
+ *              application/json:
+ *                  schema:
+ *                      type: object
+ *                      $ref: '#/definitions/Login'
+ *      responses:
+ *          201:
+ *              description: The response code
+ *              content:
+ *                  text/plain:
+ *                      schema:
+ *                          type: string
+ *          400:
+ *              description: The email is alrady in use
+ */
 router.post(
     '/user',
     [
@@ -43,11 +72,25 @@ router.post(
         await User.create(email, password)
     
         // Return success
-        return res.status(200).json({ resultCode: ResultCode.UserCreated })
+        return res.status(201).json({ resultCode: ResultCode.UserCreated })
     }
 );
 
-// Get users
+/**
+ * @swagger
+ * /user:
+ *  get:
+ *      summary: Get all users
+ *      tags: [Users]
+ *      responses:
+ *          200:
+ *              description: The response code
+ *              content:
+ *                  application/json:
+ *                      schema:
+ *                          type: object
+ *                          $ref: '#/components/User'
+ */
 router.get(
     '/user',
     [
@@ -66,20 +109,49 @@ router.get(
     }
 );
 
-// Get user by ID.
+/**
+ * @swagger
+ * parameters:
+ *  userId:
+ *      name: id
+ *      description: User's id.
+ *      in: path
+ *      required: true
+ *      type: string
+ */
+
+/**
+ * @swagger
+ * /user/{id}:
+ *  get:
+ *      summary: Get a user by id
+ *      tags: [Users]
+ *      parameters:
+ *          - $ref: '#/parameters/userId'
+ *      responses:
+ *          200:
+ *              description: The user
+ *              content:
+ *                  application/json:
+ *                      schema:
+ *                          type: object
+ *                          $ref: '#/components/User'
+ *          400:
+ *              description: The response code. Cannot find the user.
+ */
 router.get(
-    '/user/:userId',
+    '/user/:id',
     [
-        param('userId')
+        param('id')
             .isString()
             .isLength({ min: 1 }),
         reportValidationError,
     ],
     async (req, res) => {
-        const { userId } = req.params;
+        const { id } = req.params;
         
         // Find user
-        const existingUser = await User.findById(userId)
+        const existingUser = await User.findById(id)
         if (!existingUser) {
             res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
             return
@@ -93,7 +165,232 @@ router.get(
     },
 );
 
-// Get user by email address.
+/**
+ * @swagger
+ * /user/{id}:
+ *  delete:
+ *      summary: Delete a user
+ *      tags: [Users]
+ *      parameters:
+ *          - $ref: '#/parameters/userId'
+ *      responses:
+ *          200:
+ *              description: The response code
+ *              content:
+ *                  text/plain:
+ *                      type: string
+ *          400:
+ *              description: The response code. Cannot find the user.
+ */
+router.delete(
+    '/user/:id',
+    [
+        param('id')
+            .isString()
+            .isLength({ min: 1 }),
+        reportValidationError,
+    ],
+    async (req, res) => {
+        const { id } = req.params;
+        
+        // Delete user
+        const result = await User.deleteOne({ id: id })
+        if (result == 0){
+            res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
+            return
+        }
+        
+        // Return result
+        res.status(200).json({ resultCode: ResultCode.UserUpdated });
+    }
+);
+
+
+/**
+ * @swagger
+ * /user/{id}/profile:
+ *  put:
+ *      summary: Set a user's profile id
+ *      tags: [Users]
+ *      parameters:
+ *          - $ref: '#/parameters/userId'
+ *      requestBody:
+ *          required: true
+ *          content:
+ *              application/json:
+ *                  schema:
+ *                      type: object
+ *                      $ref: '#/definitions/Login'
+ *      responses:
+ *          200:
+ *              description: The response code
+ *              content:
+ *                  text/plain:
+ *                      type: string
+ *          400:
+ *              description: The response code. Cannot find the profile.
+ */
+router.put(
+    '/user/:id/profile',
+    [
+        param('id')
+            .isString()
+            .isLength({ min: 1 })
+            .custom(async value => {
+                const results = User.find({ id: value })
+                if (results.length == 0) {
+                    throw new Error(`Failed login attempt for ${value}.`);
+                }
+            }),
+        body().isObject(),
+        body('profileId')
+            .isString()
+            .isLength({ min: 1 }),
+        reportValidationError,
+    ],
+    async (req, res) => {
+        const { id } = req.params;
+        const { profileId } = req.body;
+
+        // Get profile (to ensure it exists)
+        const profile = await Profile.findById(profileId)
+        if (!profile) {
+            res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
+            return
+        }
+
+        // Update user
+        await User.updateOne({ id: id }, { profileId: profile.id })
+
+        // Return result
+        res.status(200).json({ resultCode: ResultCode.UserUpdated });
+    }
+);
+
+/**
+ * @swagger
+ * /user/{id}/profile:
+ *  get:
+ *      summary: Get the profile set to the user by its profile id
+ *      tags: [Users]
+ *      parameters:
+ *          - $ref: '#/parameters/userId'
+ *      responses:
+ *          200:
+ *              description: The profile
+ *              content:
+ *                  application/json:
+ *                      schema:
+ *                          type: object
+ *                          $ref: '#/components/Profile'
+ *          400:
+ *              description: The response code. Cannot find the profile.
+ */
+router.get(
+    '/user/:id/profile',
+    [
+        param('id')
+            .isString()
+            .isLength({ min: 1 }),
+        reportValidationError,
+    ],
+    async (req, res) => {
+        const { id } = req.params;
+
+        // Find user
+        const existingUser = await User.findById(id)
+        if (!existingUser) {
+            res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
+            return
+        }
+
+        // Get profile
+        const profile = await User.getProfile(existingUser)
+        // Return profile
+        res.status(200).json(profile);
+    }
+);
+
+/**
+ * @swagger
+ * /user/{id}/preferences:
+ *  get:
+ *      summary: Get a user's profile preferences
+ *      tags: [Users]
+ *      parameters:
+ *          - $ref: '#/parameters/userId'
+ *      responses:
+ *          200:
+ *              description: The response code
+ *              content:
+ *                  application/json:
+ *                      schema:
+ *                          type: object
+ *                          $ref: '#/components/Preferences'
+ *          400:
+ *              description: The response code. Cannot find the profile.
+ *              content:
+ *                  text/plain:
+ *                      type: string
+ */
+router.get(
+    '/user/:id/preferences',
+    [
+        param('id')
+            .isString()
+            .isLength({ min: 1 }),
+        reportValidationError,
+    ],
+    async (req, res) => {
+        const { id } = req.params;
+
+        // Find user
+        const existingUser = await User.findById(id)
+        if (!existingUser) {
+            res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
+            return
+        }
+
+        // Get preferences
+        const preferences = await User.getPreferences(existingUser)
+        // Return preferences
+        res.status(200).json(preferences);
+    }
+);
+
+/**
+ * @swagger
+ * parameters:
+ *  userEmail:
+ *      name: email
+ *      description: User's email.
+ *      in: path
+ *      required: true
+ *      type: string
+ */
+
+/**
+ * @swagger
+ * /user/email/{email}:
+ *  get:
+ *      summary: Get a user by email address
+ *      tags: [Users]
+ *      parameters:
+ *          - $ref: '#/parameters/userEmail'
+ *      responses:
+ *          200:
+ *              description: The user
+ *              content:
+ *                  application/json:
+ *                      schema:
+ *                          type: object
+ *                          $ref: '#/components/User'
+ *          400:
+ *              description: The response code. Cannot find the user.
+ *              content:
+ *                  text/plain:
+ *                      type: string
+ */
 router.get(
     '/user/email/:email',
     [
@@ -118,95 +415,6 @@ router.get(
         // Return filtered user
         res.status(200).json(existingUser);
     },
-);
-
-// Delete a user.
-router.delete(
-    '/user/:userId',
-    [
-        param('userId')
-            .isString()
-            .isLength({ min: 1 }),
-        reportValidationError,
-    ],
-    async (req, res) => {
-        const { userId } = req.params;
-        
-        // Delete user
-        const result = await User.deleteOne({ id: userId })
-        if (result == 0){
-            res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
-            return
-        }
-        
-        // Return result
-        res.status(200).json({ resultCode: ResultCode.UserUpdated });
-    }
-);
-
-// Set user profile.
-router.put(
-    '/user/:userId/profile',
-    [
-        param('userId')
-            .isString()
-            .isLength({ min: 1 })
-            .custom(async value => {
-                const results = User.find({ id: value })
-                if (results.length == 0) {
-                    throw new Error(`Failed login attempt for ${value}.`);
-                }
-            }),
-        body().isObject(),
-        body('profileId')
-            .isString()
-            .isLength({ min: 1 }),
-        reportValidationError,
-    ],
-    async (req, res) => {
-        const { userId } = req.params;
-        const { profileId } = req.body;
-
-        // Get profile (to ensure it exists)
-        const profile = await Profile.findById(profileId)
-        if (!profile) {
-            res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
-            return
-        }
-
-        // Update user
-        await User.updateOne({ id: userId }, { profileId: profile.id })
-
-        // Return result
-        res.status(200).json({ resultCode: ResultCode.UserUpdated });
-    }
-);
-
-// Get user profile.
-router.get(
-    '/user/:userId/profile',
-    [
-        param('userId')
-            .isString()
-            .isLength({ min: 1 }),
-        reportValidationError,
-    ],
-    async (req, res) => {
-        const { userId } = req.params;
-
-        // Find user
-        const existingUser = await User.findById(userId)
-        if (!existingUser) {
-            res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
-            return
-        }
-
-        // Create preference
-        const preference = await User.getProfile(existingUser)
-
-        // Return profile
-        res.status(200).json(preference);
-    }
 );
 
 module.exports = router;

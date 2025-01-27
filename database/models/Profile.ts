@@ -1,3 +1,28 @@
+/**
+ * @swagger
+ * components:
+ *  schemas:
+ *      Profile:
+ *          type: object
+ *          required:
+ *              - name
+ *              - userId
+ *          properties:
+ *              id:
+ *                  type: string
+ *                  description: The auto-generated id of the profile
+ *              name:
+ *                  type: string
+ *                  description: The name of the profile
+ *              userId:
+ *                  type: string
+ *                  description: The foreign key of a user
+ *          example:
+ *              id: 7d7a9092-666b-4a84-8aad-294d15a306f6
+ *              name: Femi
+ *              userId: 410544b2-4001-4271-9855-fec4b6a6442a
+ */
+
 // Get Redis functions
 const { 
     getClient, 
