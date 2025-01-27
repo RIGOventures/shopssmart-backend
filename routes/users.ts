@@ -15,7 +15,7 @@ const { ResultCode } = require('@/utils/result')
 const SENSITIVE_FIELD_NAMES = ['password'];
 
 // Get validators
-const reportValidationError = require('@/utils/validation/report-validation-error'); // Get error report middleware
+const { reportValidationError, ResultError } = require('@/utils/validation/report-validation-error'); // Get error report middleware
 
 // Get User model
 const User = require("@/models/User");
@@ -55,7 +55,7 @@ router.post(
             .custom(async value => {
                 const results = await User.find({ email: value })
                 if (results.length >= 1) {
-                    throw new Error('E-mail already in use');
+                    throw new ResultError('E-mail already in use', ResultCode.UserAlreadyExists);
                 }
             }),
         body('password')
@@ -237,9 +237,9 @@ router.put(
             .isString()
             .isLength({ min: 1 })
             .custom(async value => {
-                const results = User.find({ id: value })
+                const results = User.findById(value)
                 if (results.length == 0) {
-                    throw new Error(`Failed login attempt for ${value}.`);
+                    throw new ResultError(`Failed login attempt for ${value}.`, ResultCode.InvalidCredentials);
                 }
             }),
         body().isObject(),

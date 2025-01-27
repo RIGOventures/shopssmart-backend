@@ -118,21 +118,23 @@ const find = async function(object?: object) {
         default:
     } 
 
-    // Check if we there is an email property
-    const email = object['email']
-    if (email) {
-        // Format email address usable by Redis (do not save this!)
-        const emailAddress = email.replace(/\./g, '\\.').replace(/\@/g, '\\@');
-        object['email'] = emailAddress
-    }
-
     // Get search index
     const indexKey = getKeyName(this.keyName, 'idx');
 
     // Get query
     const query: string[] = []
-    for (const [key, value] of Object.entries(object)) {
-        query.push(`@${key}:{${value}}` )
+    for (const key of conditions) {
+        let value = object[key]
+
+        // Check if this is an email property
+        if (key == 'email') {
+            // Escape special characters
+            value = value.replace(/\./g, '\\.')
+                .replace(/\@/g, '\\@')
+                .replace(/\-/g, '\\-');
+        }
+
+        query.push(`@${key}:{ ${value} }` )
     }
 
     // Search using the formatted email

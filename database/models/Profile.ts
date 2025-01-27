@@ -39,8 +39,9 @@ const MODEL_KEY = "profiles"
 const Model = require("@/models/Model")
 
 // Get preference model
-const { key } = require("@/models/Preference")
+const { key, template } = require("@/models/Preference")
 const PREFERENCE_KEY = key
+const PREFERENCE_TEMPLATE = template
 
 // Define profile class
 class Profile extends Model {
@@ -81,9 +82,16 @@ Profile.prototype.setPreferences = setPreferences
 
 // Get preferences
 const getPreferences = async function(profileId: string) {
-    // Get the record
+    // Define key
     const key = getKeyName(PREFERENCE_KEY, profileId)
-    return await Model.prototype.findById.call(this, key)
+
+    // Get preferences
+    const result = await Model.prototype.findById.call(this, key)
+    if (!result) {
+        return PREFERENCE_TEMPLATE
+    }
+
+    return result
 }
 Profile.prototype.getPreferences = getPreferences
 

@@ -1,4 +1,10 @@
+const assert = require('node:assert/strict');
+
+// Get base model
+const Model = require("@/models/Model");
+
 /**
+ * Define user class
  * @swagger
  * components:
  *  schemas:
@@ -29,6 +35,12 @@
  *              password: LongTestPassword
  */
 
+class User extends Model {
+    constructor(keyName: string) {
+        super(keyName);
+    }
+}
+
 // Get Redis functions
 const { 
     getClient,  
@@ -46,22 +58,8 @@ const MODEL_KEY = "users"
 // Define search schema. 
 const SEARCH_SCHEMA = ['email', 'TAG', 'username', 'TEXT']
 
-// Get base model
-const Model = require("@/models/Model");
-
 // Get Profile model
 const Profile = require("@/models/Profile");
-
-// Get Profile model
-const { template } = require("@/models/Preference")
-const PREFERENCE_TEMPLATE = template
-
-// Define user class
-class User extends Model {
-    constructor(keyName: string) {
-        super(keyName);
-    }
-}
 
 // Create user
 const create = async function(email: string, password: string) {
@@ -115,7 +113,7 @@ const linkForeignRecord = async function(userId: string, index: string, record: 
 User.prototype.linkForeignRecord = linkForeignRecord
 
 // Get a foreign record
-const getForeignRecord = async function(userId: string, index: string, id: string) {
+const getForeignRecord = async function(userId: string, index: string, id: string)  {
     // Get the record
     const record = await Model.prototype.findById.call({ keyName: index }, id)
 
@@ -127,25 +125,34 @@ const getForeignRecord = async function(userId: string, index: string, id: strin
 
     // Compare with session.userId
     if (record.userId != userId) {
-        throw new Error('Unauthorized')
+        const foreignKey = getKeyName(index, id)
+        throw new Error(`User ${userId} cannot access ${foreignKey}`)
+    }
+
+    // Change based on index
+    if (index == "chat") {
+        record['messages'] = JSON.parse(record['messages'])
     }
 
     return record
 }
 User.prototype.getForeignRecord = getForeignRecord
 
+// Assert the function throws
+assert.rejects(getForeignRecord);
+
 // Delete a foreign record
 const deleteForeignRecord = async (userId: string, index: string, id: string) => {
     // Get record
     const record = await getForeignRecord(userId, index, id)
 
-    // Delete the record
-    const primaryKey = getKeyName(index, record.id)
-    await redis.del(primaryKey)
-
     // Remove the foreign key
     const foreignKey = getKeyName(MODEL_KEY, index, record.userId)
+    const primaryKey = getKeyName(index, record.id)
     await redis.zrem(foreignKey, primaryKey)
+
+    // Delete the record
+    return await redis.del(primaryKey)
 }
 User.prototype.deleteForeignRecord = deleteForeignRecord
 
@@ -166,6 +173,14 @@ const getForeignRecords = async function(userId: string, index: string) {
     
     // Flatten and filter results
     const filtered = results.flat().filter(function (el) { return el != null; });
+
+    // Change based on index
+    if (index == "chat") {
+        filtered.map((chat) => {
+            chat['messages'] = JSON.parse(chat['messages'])
+        });
+    }
+
     return filtered
 }
 User.prototype.getForeignRecords = getForeignRecords
@@ -217,14 +232,8 @@ User.prototype.getProfile = getProfile
 
 // Get profile + preferences.
 const getPreferences = async function(user: User) {
-    // Get profile
-    const profile = await getProfile(user)
-    if (!profile) {
-        return PREFERENCE_TEMPLATE
-    }
-
     // Get preference
-    const preference = await Profile.getPreferences(profile.id)
+    const preference = await Profile.getPreferences(user.profileId)
     // Return result
     return preference
 }   

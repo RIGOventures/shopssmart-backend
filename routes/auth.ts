@@ -30,8 +30,8 @@ const { body, param } = require('express-validator');
 // Types
 const { ResultCode } = require('@/utils/result')
 
-// Get validators
-const reportValidationError = require('@/utils/validation/report-validation-error'); // Get error report middleware
+// Get error report middleware
+const { reportValidationError, ResultError } = require('@/utils/validation/report-validation-error'); 
 
 // Get User model
 const User = require("@/models/User");
@@ -68,7 +68,7 @@ router.post(
             .custom(async value => {
                 const results = await User.find({ email: value })
                 if (results.length >= 1) {
-                    throw new Error(`E-mail ${value} already in use`);
+                    throw new ResultError(`E-mail ${value} already in use`, ResultCode.UserAlreadyExists);
                 }
             }),
         body('password')
@@ -123,7 +123,7 @@ router.post(
             .custom(async value => {
                 const searchResults = await User.find({ email: value })
                 if (searchResults.length == 0) {
-                    throw new Error(`Failed login attempt for ${value}.`);
+                    throw new ResultError(`Failed login attempt for ${value}.`, ResultCode.InvalidCredentials);
                 }
             }),
         body('password')
@@ -150,12 +150,11 @@ router.post(
             const message = `Failed login attempt for ${email}.`
             console.log(message);
 
-            res.status(401).json({ 
+            return res.status(401).json({ 
                 type: 'error',
                 resultCode: ResultCode.InvalidCredentials,
                 message: message
             })
-            return 
         }
 
         const message = `> Login user ${email}.`

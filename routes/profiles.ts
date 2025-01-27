@@ -1,23 +1,67 @@
+/**
+ * @swagger
+ * tags:
+ *  name: Profiles
+ *  description: Profile administration
+ */
+
 const router = require('express').Router();
-const { body, param } = require('express-validator');
+const { header, body, param } = require('express-validator');
 
 // Types
 const { ResultCode } = require('@/utils/result')
 
-// Get validators
-const isAuthenticated = require('@/utils/validation/check-session'); // Get authentication middleware
-const reportValidationError = require('@/utils/validation/report-validation-error'); // Get error report middleware
+// Get authentication middleware
+const isAuthenticated = require('@/utils/validation/check-session'); 
+// Get error report middleware
+const { reportValidationError, ResultError } = require('@/utils/validation/report-validation-error'); 
 
 // Get User model
 const User = require("@/models/User");
 // Get Profile model
 const Profile = require("@/models/Profile");
 
-// Create profile
+/**
+ * @swagger
+ * definitions:
+ *  CreateProfile:
+ *      required:
+ *          - profileName
+ *      properties:
+ *          profileName: 
+ *              type: string
+ *      example:
+ *          profileName: Family Dinner
+ */
+
+/**
+ * @swagger
+ * /profile:
+ *  post:
+ *      summary: Create a user profile
+ *      tags: [Profiles]
+ *      requestBody:
+ *          required: true
+ *          content:
+ *              application/json:
+ *                  schema:
+ *                      type: object
+ *                      $ref: '#/definitions/CreateProfile'
+ *      responses:
+ *          201:
+ *              description: The response code
+ *              content:
+ *                  text/plain:
+ *                      schema:
+ *                          type: string
+ *          400:
+ *              description: The email is alrady in use
+ */
 router.post(
     '/profile',
     [
-        isAuthenticated,
+        header()
+            .custom(isAuthenticated),
         body().isObject(),
         body('profileName', "Profile name is required")
             .isString()
@@ -37,15 +81,30 @@ router.post(
         await User.linkForeignRecord(userId, 'profiles', profile)
 
         // Return result
-        res.status(200).json(profile);
+        res.status(201).json(profile);
     }
 );
 
-// Get all user profiles
+/**
+ * @swagger
+ * /profile:
+ *  get:
+ *      summary: Get all the user's profiles
+ *      tags: [Profiles]
+ *      responses:
+ *          200:
+ *              description: The response code
+ *              content:
+ *                  application/json:
+ *                      schema:
+ *                          type: object
+ *                          $ref: '#/components/Profile'
+ */
 router.get(
     '/profile',
     [
-        isAuthenticated,
+        header()
+            .custom(isAuthenticated),
         reportValidationError,
     ],
     async (req, res) => {
@@ -60,24 +119,54 @@ router.get(
     }
 );
 
-// Get a profile by ID
+/**
+ * @swagger
+ * parameters:
+ *  profileId:
+ *      name: id
+ *      description: Profile's id.
+ *      in: path
+ *      required: true
+ *      type: string
+ */
+
+/**
+ * @swagger
+ * /profile/{id}:
+ *  get:
+ *      summary: Get a profile by id
+ *      tags: [Profiles]
+ *      parameters:
+ *          - $ref: '#/parameters/profileId'
+ *      responses:
+ *          200:
+ *              description: The profile
+ *              content:
+ *                  application/json:
+ *                      schema:
+ *                          type: object
+ *                          $ref: '#/components/Profile'
+ *          400:
+ *              description: The response code. Cannot find the profile.
+ */
 router.get(
-    '/profile/:profileId',
+    '/profile/:id',
     [
-        isAuthenticated,
-        param('profileId')
+        header()
+            .custom(isAuthenticated),
+        param('id')
             .isString()
             .isLength({ min: 1 }),
         reportValidationError,
     ],
     async (req, res) => {
-        const { profileId } = req.params;
+        const { id } = req.params;
 
         // Get session
         const { userId } = req.session;
 
         // Get record
-        const profile = await User.getForeignRecord(userId, 'profiles', profileId)
+        const profile = await User.getForeignRecord(userId, 'profiles', id)
         if (!profile) {
             res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
             return
@@ -88,35 +177,72 @@ router.get(
     }
 );
 
-// Delete a user profile by ID
+/**
+ * @swagger
+ * /profile/{id}:
+ *  delete:
+ *      summary: Delete a profile
+ *      tags: [Profiles]
+ *      parameters:
+ *          - $ref: '#/parameters/profileId'
+ *      responses:
+ *          200:
+ *              description: The response code
+ *              content:
+ *                  text/plain:
+ *                      type: string
+ *          400:
+ *              description: The response code. Cannot find the profile.
+ */
 router.delete(
-    '/profile/:profileId',
+    '/profile/:id',
     [
-        isAuthenticated,
-        param('profileId')
+        header()
+            .custom(isAuthenticated),
+        param('id')
             .isString()
             .isLength({ min: 1 }),
         reportValidationError,
     ],
     async (req, res) => {
-        const { profileId } = req.params;
+        const { id } = req.params;
 
         // Get session
         const { userId } = req.session;
 
         // Delete record
-        await User.deleteForeignRecord(userId, 'profiles', profileId)
+        const result = await User.deleteForeignRecord(userId, 'profiles', id)
+        if (result == 0){
+            res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
+            return
+        }
 
         // Return result
         res.send("OK");
     }
 );
 
-// Set profile preferences by ID
+/**
+ * @swagger
+ * /profile/{id}/preferences:
+ *  put:
+ *      summary: Set profile preference by id
+ *      tags: [Profiles]
+ *      parameters:
+ *          - $ref: '#/parameters/profileId'
+ *      responses:
+ *          200:
+ *              description: The response code
+ *              content:
+ *                  text/plain:
+ *                      type: string
+ *          400:
+ *              description: The response code. Cannot find the profile.
+ */
 router.put(
-    '/profile/:profileId/preference',
+    '/profile/:id/preferences',
     [
-        param('profileId')
+        param('id')
             .isString()
             .isLength({ min: 1 }),
         body().isObject(),
@@ -129,34 +255,58 @@ router.put(
         reportValidationError,
     ],
     async (req, res) => {
-        const { profileId } = req.params;
+        const { id } = req.params;
         const { lifestyle, allergen, other } = req.body;
 
         // Link preference
-        await Profile.setPreferences(profileId, lifestyle, allergen, other)
+        const result = await Profile.setPreferences(id, lifestyle, allergen, other)
+        if (result == 0){
+            res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
+            return
+        }
 
         // Return result
         res.status(200).json({ resultCode: ResultCode.ProfileUpdated });
     }
 );
 
-// Get profile preferences by ID
+/**
+ * @swagger
+ * /profile/{id}/preferences:
+ *  get:
+ *      summary: Get profile preferences by id
+ *      tags: [Profiles]
+ *      parameters:
+ *          - $ref: '#/parameters/profileId'
+ *      responses:
+ *          200:
+ *              description: The response code
+ *              content:
+ *                  text/plain:
+ *                      type: string
+ *          400:
+ *              description: The response code. Cannot find the profile.
+ */
 router.get(
-    '/profile/:profileId/preference',
+    '/profile/:id/preferences',
     [
-        param('profileId')
+        param('id')
             .isString()
             .isLength({ min: 1 }),
         reportValidationError,
     ],
     async (req, res) => {
-        const { profileId } = req.params;
+        const { id } = req.params;
         
         // Get preference
-        const preference = await Profile.getPreferences(profileId)
+        const preferences = await Profile.getPreferences(id)
+        if (!preferences){
+            res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
+            return
+        }
 
         // Return result
-        res.status(200).json(preference);
+        res.status(200).json(preferences);
     }
 );
 

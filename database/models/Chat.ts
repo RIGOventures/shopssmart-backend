@@ -1,3 +1,40 @@
+/**
+ * @swagger
+ * components:
+ *  schemas:
+ *      Chat:
+ *          type: object
+ *          required:
+ *              - name
+ *              - userId
+ *          properties:
+ *              id:
+ *                  type: string
+ *                  description: The auto-generated id of the chat
+ *              title:
+ *                  type: string
+ *                  description: The title of the chat
+ *              userId:
+ *                  type: string
+ *                  description: The foreign key of a user
+ *              messages: 
+ *                  type: array
+ *                  description: The chat messaged
+ *              createdAt:
+ *                  type: string
+ *                  format: date
+ *                  description: The time the chat was created
+ *              updatedAt:
+ *                  type: string
+ *                  format: date
+ *                  description: The time the chat was updated
+ *          example:
+ *              id: 7d7a9092-666b-4a84-8aad-294d15a306f6
+ *              title: Apple
+ *              userId: 410544b2-4001-4271-9855-fec4b6a6442a
+ *              messages: [{ "role": 'assistant', "content": "Apple" }]
+ */
+
 const { convertToCoreMessages } = require('ai');
 
 // Define key
