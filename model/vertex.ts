@@ -1,4 +1,4 @@
-import { getGCPCredentials } from '@/utils/env-auth';
+import { getMissingKeys, getGCPCredentials } from '@/utils/env-auth';
 import { auth, JWT } from 'google-auth-library';
 
 import { createVertex } from '@ai-sdk/google-vertex'
@@ -9,7 +9,13 @@ import { streamText } from 'ai';
 // Create Google gemini model
 let model
 
-getGCPCredentials().then((credentials: any) => {
+getGCPCredentials().then(async (credentials: any) => {
+    // Check environment keys
+    const missingKeys = await getMissingKeys()
+    missingKeys.map(key => {
+        console.error(`Missing ${key} environment variable!`)
+    })
+
     // Create client
     const client = auth.fromJSON(credentials) 
     if (client instanceof JWT) {

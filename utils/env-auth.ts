@@ -6,7 +6,7 @@ const keysRequired = [
     'GOOGLE_SERVICE_KEY' 
 ]
 
-const otherKeys = [
+const externalKeys = [
     'KROGER_CLIENT_ID',
     'KROGER_CLIENT_SECRET',
     'WALGREENS_API_KEY', 
@@ -16,6 +16,12 @@ const otherKeys = [
 
 export async function getMissingKeys() {
     return keysRequired
+        .map(key => (process.env[key] ? '' : key))
+        .filter(key => key !== '')
+}
+
+export async function getMissingExternalKeys() {
+    return externalKeys
         .map(key => (process.env[key] ? '' : key))
         .filter(key => key !== '')
 }
