@@ -6,13 +6,6 @@ const keysRequired = [
     'GOOGLE_SERVICE_KEY' 
 ]
 
-const externalKeys = [
-    'KROGER_CLIENT_ID',
-    'KROGER_CLIENT_SECRET',
-    'WALGREENS_API_KEY', 
-    'SPOONACULAR_API_KEY', 
-    'UPC_DATABASE_API_KEY', 
-]
 
 export async function getMissingKeys() {
     return keysRequired
@@ -20,11 +13,6 @@ export async function getMissingKeys() {
         .filter(key => key !== '')
 }
 
-export async function getMissingExternalKeys() {
-    return externalKeys
-        .map(key => (process.env[key] ? '' : key))
-        .filter(key => key !== '')
-}
 
 // Get GCP credentials as a JSON
 // https://cloud.google.com/nodejs/docs/reference/google-auth-library/latest#json-web-tokens

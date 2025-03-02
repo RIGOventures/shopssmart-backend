@@ -30,6 +30,56 @@ const { submitPrompt } = require("@/model/vertex");
 
 /**
  * @swagger
+ * /chat:
+ *  post:
+ *      summary: Get a chat response
+ *      tags: [Chats]
+ *      parameters:
+ *          - $ref: '#/parameters/chatId'
+ *      requestBody:
+ *          required: true
+ *          content:
+ *              application/json:
+ *                  schema:
+ *                      type: object
+ *                      properties:
+ *                          content:
+ *                              type: string
+ *      responses:
+ *          200:
+ *              description: The response code
+ *          400:
+ *              description: The response code. Cannot find the chat.
+ */
+router.post(
+    '/message',
+    [
+        rateLimit,
+        body().isObject(),
+        body('content')
+            .isString()
+            .isLength({ min: 1 }),
+        reportValidationError,
+    ],
+    async (req, res) => {
+        const { content } = req.body;
+
+        // Handle on finish
+        async function onFinish({ text }: { text: string }) {
+            // End stream
+            res.end(text)
+        }
+
+        // Submit message
+        const streamResponse = await submitPrompt(content, {}, onFinish)
+
+        // Pipe stream to response!
+        await pipeline(streamResponse.body, res);
+    }
+)
+
+/**
+ * @swagger
  * definitions:
  *  CreateChat:
  *      required:
@@ -251,14 +301,14 @@ router.post(
         reportValidationError,
     ],
     async (req, res) => {
-        const { chatId } = req.params;
+        const { id } = req.params;
         const { content } = req.body;
 
         // Get session
         const { userId } = req.session;
 
         // Get chat
-        const chat = await User.getForeignRecord(userId, 'chats', chatId);
+        const chat = await User.getForeignRecord(userId, 'chats', id);
         if (!chat) {
             res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
             return
@@ -272,7 +322,7 @@ router.post(
             const chatMessages = [...chat['messages'], ...responseMessages];
 
             // Save chat
-            await Chat.updateOne({ id: chatId }, {
+            await Chat.updateOne({ id: id }, {
                 updatedAt: new Date(),
                 messages: chatMessages,      
             })
@@ -404,9 +454,9 @@ router.get(
         reportValidationError,
     ],
     async (req, res) => {
-        const { chatId } = req.params;
+        const { id } = req.params;
 
-        const chat = await Chat.findById(chatId)
+        const chat = await Chat.findById(id)
         if (!chat || !chat.sharePath) {
             res.status(400).json({ resultCode: ResultCode.InvalidCredentials })
             return
