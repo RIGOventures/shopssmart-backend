@@ -18,12 +18,25 @@ import { submitPrompt } from "@/model/vertex";
 
 /**
  * @swagger
+ * definitions:
+ *  AddPreferences:
+ *      properties:
+ *          lifestyle: 
+ *              type: string
+ *          allergen:
+ *              type: string
+ *          other:
+ *              type: string
+ *      example:
+ *          { "lifestyle": 'diabetes', "allergen": "Nuts", "other": "none" }
+ */
+
+/**
+ * @swagger
  * /message/sample:
  *  post:
  *      summary: Get a chat response
- *      tags: [Chats]
- *      parameters:
- *          - $ref: '#/parameters/chatId'
+ *      tags: [Sample]
  *      requestBody:
  *          required: true
  *          content:
@@ -33,11 +46,14 @@ import { submitPrompt } from "@/model/vertex";
  *                      properties:
  *                          content:
  *                              type: string
+ *                          preferences:
+ *                              type: object
+ *                              $ref: '#/definitions/AddPreferences'
  *      responses:
  *          200:
- *              description: The response code
+ *              description: The response message.
  *          400:
- *              description: The response code. Cannot find the chat.
+ *              description: Some error.
  */
 router.post(
     '/message/sample',
@@ -48,8 +64,7 @@ router.post(
             .isString()
             .isLength({ min: 1 }),
         body('preferences')
-            .isString()
-            .isLength({ min: 1 }),
+            .isObject(),
         reportValidationError,
     ],
     async (req, res) => {

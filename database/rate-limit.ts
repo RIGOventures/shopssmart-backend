@@ -6,13 +6,16 @@ interface UserRequestData {
 	lastResetTime: number;
 }
 
+// define key prefix
+const KEY_PREFIX = "user_ip"
+
 // define maximum number for requests
 const MAX_REQUESTS = 5
 
 /* get the User request data */
 export async function getUserRequestData(userIP: string): Promise<UserRequestData | null> {
 	try {
-		const data = await client.get(userIP);
+		const data = await client.hGetAll(`${KEY_PREFIX}:${userIP}`);
 		return data;
 	} catch (error) {
 		console.error('Error retrieving user request data:', error);
@@ -23,7 +26,7 @@ export async function getUserRequestData(userIP: string): Promise<UserRequestDat
 /* set User request data */
 export async function setUserRequestData(userIP: string, data: UserRequestData) {
 	try {
-		await client.set(userIP, data);
+		await client.hSet(`${KEY_PREFIX}:${userIP}`, [...Object.entries(data).flat()]);
 	} catch (error) {
 		console.error('Error updating user request data:', error);
 		throw error;
@@ -37,7 +40,7 @@ export async function rateLimitUser(userIP: string) {
 	const userRequests = await getUserRequestData(userIP);
 	if (userRequests) {
 		const { count, lastResetTime } = userRequests;
-		
+
 		// check if it's a new day and reset the count
 		const currentTime = Date.now();
 		const currentDay = new Date(currentTime).toLocaleDateString();
