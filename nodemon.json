@@ -1,5 +1,5 @@
 {
     "watch": ["nodemon.json", "index.ts", "routes/**", "utils/**", "database/redis.ts"],
-    "exec": "ts-node index.ts",
+    "exec": "tsx index.ts",
     "ext": "js ts"
 }

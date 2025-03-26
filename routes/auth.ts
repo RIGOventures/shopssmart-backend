@@ -5,6 +5,11 @@
  *  description: User authentication and login
  */
 
+import express from 'express';
+const router = express.Router(); // create router
+
+import { body, param } from 'express-validator';
+
 /**
  * @swagger
  * definitions:
@@ -24,17 +29,13 @@
  *          password: password
  */
 
-const router = require('express').Router();
-const { body, param } = require('express-validator');
+import { ResultCode, ResultError } from '@/utils/result';
 
-// Types
-const { ResultCode } = require('@/utils/result')
+import { reportValidationError } from '@/utils/middleware'; 
 
-// Get error report middleware
-const { reportValidationError, ResultError } = require('@/utils/validation/report-validation-error'); 
+import { EntityId } from "redis-om";
 
-// Get User model
-const User = require("@/models/User");
+import { createUser, validatePassword, userRepository } from "@/database/types";
 
 /**
  * @swagger
@@ -66,7 +67,11 @@ router.post(
             .isEmail()
             .trim()
             .custom(async value => {
-                const results = await User.find({ email: value })
+                // find all Users that match this email
+                const results = await userRepository.search()
+                    .where('email').equals(value)
+
+                // check if this email was found
                 if (results.length >= 1) {
                     throw new ResultError(`E-mail ${value} already in use`, ResultCode.UserAlreadyExists);
                 }
@@ -82,7 +87,7 @@ router.post(
         const { email, password } = req.body;
     
         // Create user
-        await User.create(email, password)
+        await createUser(email, password)
     
         // Return success
         return res.status(201).json({ resultCode: ResultCode.UserCreated })
@@ -120,11 +125,18 @@ router.post(
         body('email')
             .isEmail()
             .trim()
-            .custom(async value => {
-                const searchResults = await User.find({ email: value })
-                if (searchResults.length == 0) {
+            .custom(async (value, { req }) => {
+                // find all Users that match this email
+                const results = await userRepository.search()
+                    .where('email').equals(value)
+
+                // check if this email was found
+                if (results.length == 0) {
                     throw new ResultError(`Failed login attempt for ${value}.`, ResultCode.InvalidCredentials);
                 }
+
+                // add User to request
+                req.body.user = results[1]
             }),
         body('password')
             .isString()
@@ -133,38 +145,29 @@ router.post(
         reportValidationError,
     ],
     async (req, res) => {
-        const { email, password } = req.body;
-
-        // Get user
-        const existingUser = await User.findOne({ email: email })
+        const { email, password, user } = req.body;
 
         // TODO: Get specific field from a hash.
         // Check out the HMGET command... https://redis.io/commands/hmget
 
-        // See if the correct password for this email was provided...
-        const passwordCorrect = await User.validatePassword(existingUser, password);
+        // check if the correct password was provided...
+        const passwordCorrect = await validatePassword(user, password);
         if (!passwordCorrect) {
-            // Remove any session this user previously had.
+            // destroy any existing session
             req.session.destroy();
 
-            const message = `Failed login attempt for ${email}.`
-            console.log(message);
-
-            return res.status(401).json({ 
-                type: 'error',
-                resultCode: ResultCode.InvalidCredentials,
-                message: message
-            })
+            // return result
+            console.log(`Failed login attempt for ${email}.`);
+            res.status(401).json({ resultCode: ResultCode.InvalidCredentials })
+            return 
         }
 
-        const message = `> Login user ${email}.`
-        console.log(message);
+        // add session
+        req.session.userId = user[EntityId];
+        req.session.email = user.email;
 
-        // Add session
-        req.session.userId = existingUser.id;
-        req.session.email = existingUser.email;
-
-        // Return result
+        // return result
+        console.log(`Login User ${email}.`);
         res.status(200).json({ resultCode: ResultCode.UserLoggedIn })
     },
 );
@@ -186,28 +189,27 @@ router.post(
 router.delete(
     '/logout',
     (req, res) => {
-        // Get session
         const session = req.session
         const { email } = session;
     
-        // Destroy the session
+        // destroy session
         session.destroy((err) => {
             if (err) {
-                console.log('Error performing logout:');
-                console.log(err);
+                console.error(err);
                 return
-            }
+            } 
 
+            // log success
             if (email) {
-                console.log(`> Logout user ${email}.`);
+                console.log(`Logout User ${email}.`);
             } else {
-                console.log('Logout called by a user without a session.');
+                console.log(`Failed logout attempt for ${email}`);
             }
         });
 
-        // Send OK
+        // send OK
         res.send('OK');
     },
 );
 
-module.exports = router;
+module.exports = router

@@ -1,7 +1,5 @@
-const assert = require('node:assert/strict');
-
-// Get base model
-const Model = require("@/models/Model");
+import { Entity, EntityId, Schema, Repository } from 'redis-om'
+import { client } from "@/redis";
 
 /**
  * Define user class
@@ -35,67 +33,112 @@ const Model = require("@/models/Model");
  *              password: LongTestPassword
  */
 
-class User extends Model {
-    constructor(keyName: string) {
-        super(keyName);
-    }
+/* define User entity */
+export interface User extends Entity {
+    /* add identification for User */
+    username?: string,
+    name?: string,
+    email: string,
+
+    /* add password for User */
+    password: string
+
+    /* add foreign key for User's Profile */
+    profileId?: string
 }
 
-// Get Redis functions
-const { 
-    getClient,  
-    getKeyName 
-} = require("@/redis");
+/* create a Schema for User */
+export const userSchema = new Schema<User>('user', {
+    username: { type: 'text' }, 
+    name: { type: 'string' }, 
+    email: { type: 'string' }, 
+    password: { type: 'string', indexed: false }, 
+    profileId: { type: 'string' },
+})
 
-// Get Redis client
-const redis = getClient();
+/* define User repository */
+export const userRepository = new Repository(userSchema, client)
 
-const bcrypt = require('bcrypt')
+import { compare, hash } from 'bcryptjs';
+const saltRounds = 10; // typically a value between 10 and 12
 
-// Define key
-const MODEL_KEY = "users"
+/* create User */
+export const createUser = async (email: string, password: string) => {
+    // encrypt password
+    const hashedPassword = await hash(password, saltRounds);
 
-// Define search schema. 
-const SEARCH_SCHEMA = ['email', 'TAG', 'username', 'TEXT']
-
-// Get Profile model
-const Profile = require("@/models/Profile");
-
-// Create user
-const create = async function(email: string, password: string) {
-    // Encrypt password
-    const saltRounds = 10; // Typically a value between 10 and 12
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
-
-    // Define object
+    // define user
     const user = {
         email,
         password: hashedPassword
     } 
 
-    // Set object
-    return await Model.prototype.create.call(this, user)
+    // save user
+    return await userRepository.save(user)
 }
-User.prototype.create = create
 
-// Create many user
-const createMany = async function(jsonArray: [ any ]) {
-    // Hash the passwords...
-    /* eslint-disable array-callback-return, no-param-reassign */
-    const saltRounds = 10; // Typically a value between 10 and 12
-    jsonArray.map((user) => {
-        user.password = bcrypt.hashSync(user.password, saltRounds);
-    });
-    /* eslint-enable */
+/* create multiple User */
+export const createUsers = async (array: User[]) => {
+    // hash the User's password
+    await Promise.all(array.map(user => {
+        // update id
+        if (user.id) {
+            // match id to entityId
+            user[EntityId] = `${user.id}`
+            // remove id
+            delete user['id'] 
+        }
 
-    return await Model.prototype.createMany.call(this, jsonArray)
+        // hash the password
+        return hash(user.password, saltRounds).then(function(newPassword: string) {
+            user.password = newPassword
+        });
+    }));
+
+    // save the Users
+    // TODO: Stream? https://stackoverflow.com/questions/74162550/how-to-store-data-in-redis-om-for-node-js
+    const results = await Promise.all(array.map(user => {
+        // save to the repository
+        return userRepository.save(user);
+    }));
+
+    // count errors
+    let errorCount = 0;
+    for (const result of results) { 
+        // TODO: Count errors from results
+        //console.log(result); 
+    }
+    return errorCount
+};
+
+/* validate a password */
+export const validatePassword = async (user: User, password: string) => {
+    // See if the correct password for this email was provided...
+    const passwordCorrect = await compare(password, user.password);
+    return passwordCorrect
 }
-User.prototype.createMany = createMany
 
-const createSearchIndex = async function() {
-    return Model.prototype.createSearchIndex.call(this, SEARCH_SCHEMA)
-}
-User.prototype.createSearchIndex = createSearchIndex
+/* get User Profile */
+export const getProfile = async (user: User) => {
+    // Get key
+    const profileId = user.profileId
+    if (!profileId) {
+        return
+    }
+
+    // Get profile
+    const profile = await Profile.findById(profileId)
+    // Return result
+    return profile
+} 
+
+/* get Profile + Preferences */
+export const getPreferences = async (user: User) => {
+    // Get preference
+    const preference = await Profile.getPreferences(user.profileId)
+    // Return result
+    return preference
+} 
 
 // Set a foreign record
 const linkForeignRecord = async function(userId: string, index: string, record: { id: string }) {
@@ -110,7 +153,6 @@ const linkForeignRecord = async function(userId: string, index: string, record: 
 
     await pipeline.exec()
 }
-User.prototype.linkForeignRecord = linkForeignRecord
 
 // Get a foreign record
 const getForeignRecord = async function(userId: string, index: string, id: string)  {
@@ -136,10 +178,6 @@ const getForeignRecord = async function(userId: string, index: string, id: strin
 
     return record
 }
-User.prototype.getForeignRecord = getForeignRecord
-
-// Assert the function throws
-assert.rejects(getForeignRecord);
 
 // Delete a foreign record
 const deleteForeignRecord = async (userId: string, index: string, id: string) => {
@@ -154,7 +192,6 @@ const deleteForeignRecord = async (userId: string, index: string, id: string) =>
     // Delete the record
     return await redis.del(primaryKey)
 }
-User.prototype.deleteForeignRecord = deleteForeignRecord
 
 // Get foreign records
 const getForeignRecords = async function(userId: string, index: string) {
@@ -183,7 +220,6 @@ const getForeignRecords = async function(userId: string, index: string) {
 
     return filtered
 }
-User.prototype.getForeignRecords = getForeignRecords
 
 // Delete foreign records
 const deleteForeignRecords = async function(userId: string, index: string) {
@@ -205,38 +241,3 @@ const deleteForeignRecords = async function(userId: string, index: string) {
 
     await pipeline.exec()
 }
-User.prototype.deleteForeignRecords = deleteForeignRecords
-
-// Validate a password.
-const validatePassword = async function(user: User, password: string) {
-    // See if the correct password for this email was provided...
-    const passwordCorrect = await bcrypt.compare(password, user.password);
-    return passwordCorrect
-}
-User.prototype.validatePassword = validatePassword
-
-// Get profile
-const getProfile = async function(user: User) {
-    // Get key
-    const profileId = user.profileId
-    if (!profileId) {
-        return
-    }
-
-    // Get profile
-    const profile = await Profile.findById(profileId)
-    // Return result
-    return profile
-}   
-User.prototype.getProfile = getProfile
-
-// Get profile + preferences.
-const getPreferences = async function(user: User) {
-    // Get preference
-    const preference = await Profile.getPreferences(user.profileId)
-    // Return result
-    return preference
-}   
-User.prototype.getPreferences = getPreferences
-
-module.exports = new User(MODEL_KEY)

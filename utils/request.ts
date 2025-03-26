@@ -1,10 +1,11 @@
+/* add search parameters to a URL */
 export function addSearchParams<T extends {}>(url: string, params: T): string {  
-    // Create url with parameters
+    // create url with parameters
     const urlWithSearchParams  = new URL(url)
 
     for (const [key, value] of Object.entries(params)) {
         let param = value || ''
-        // Append search parameter
+        // append search parameter
         urlWithSearchParams.searchParams.append(key, param.toString());
     }
 

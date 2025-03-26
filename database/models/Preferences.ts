@@ -1,3 +1,6 @@
+import { Entity, Schema, Repository } from 'redis-om'
+import { client } from "@/redis";
+
 /**
  * @swagger
  * components:
@@ -23,11 +26,23 @@
  *              userId: 410544b2-4001-4271-9855-fec4b6a6442a
  */
 
-// Define key
-const MODEL_KEY = "preferences"
+/* define Preferences entity */
+export interface Preferences extends Entity {
+    /* add aspects of Preferences */
+    lifestyle: string
+    allergen: string, 
+    other?: string
+}
 
-// Get default model
-const Model = require("@/models/Model")
+/* create a Schema for Preferences */
+export const preferencesSchema = new Schema<Preferences>('preferences', {
+    lifestyle: { type: 'string' }, 
+    allergen: { type: 'string' }, 
+    other: { type: 'string' },
+})
+
+/* define Preferences repository */
+export const preferencesRepository = new Repository(preferencesSchema, client)
 
 // Define default preferences
 const DEFAULT = {
@@ -35,16 +50,3 @@ const DEFAULT = {
     allergen: "", 
     other: "",  
 }
-
-// Define profile class
-class Preference extends Model {
-    constructor(keyName: string) {
-        super(keyName);
-    }
-}
-
-module.exports = new Preference(MODEL_KEY)
-
-// Export constants
-module.exports.key = MODEL_KEY
-module.exports.template = DEFAULT

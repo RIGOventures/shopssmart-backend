@@ -1,71 +1,117 @@
-const Redis = require('ioredis');
+import { createClient } from 'redis'
+import { Repository } from 'redis-om'
 
-// Create client & connect to Redis
-const redis = new Redis(
-    // Port
-    Number(process.env.REDIS_PORT || 6379), 
-    // Host
-    process.env.REDIS_HOST, 
-    // Options
-    {
-        username: process.env.REDIS_USERNAME,
-        password: process.env.REDIS_PASSWORD,
+// Define params
+let port = Number(process.env.REDIS_PORT || 6379)
+
+/* Create Redis client */
+// https://redis.io/docs/latest/develop/clients/nodejs/connect/
+export const client = createClient({
+    username: process.env.REDIS_USERNAME,
+    password: process.env.REDIS_PASSWORD, // use your password here
+    socket: {
+        host: process.env.REDIS_HOST,
+        port: port
     }
-);
+});
 
-// Convert a list of indexes to an index key
-const getKeyName = (...args) => `${args.join(':')}`
+client.on('error', (err) => console.log('Redis Client Error', err));
+await client.connect();
+
+/* Convert a list of indexes to an index key */
+export const getKeyName = (...args) => `${args.join(':')}`
 
 // Maximum number of search results to return
 const MAX_SEARCH_RESULTS = 1000;
 
-// Search the index with a textual query, returning either documents or just ids
-const performSearch = async (index: string, ...query) => {
+/**
+ * Search the index with a textual query, returning either documents or just ids
+ * Ref: https://redis.io/docs/latest/develop/interact/search-and-query/query/combined/
+ * @param repository 
+ * @param query 
+ * @returns results
+ */
+export const performSearch = async (repository: Repository, ...query: string[]) => {
     try {
-        // Return the first MAX_SEARCH_RESULTS matching documents.
-        const searchResults = await redis.call('FT.SEARCH', index, query, 'LIMIT', '0', MAX_SEARCH_RESULTS);
+        
+
+        // // Get all if there are not properties to match
+        // const conditions = Object.keys(object)
+        // switch(conditions.length) {
+        //     case 0:
+        //         return await getAll(this.keyName)
+        //     case 1:
+        //         // Check if we there is an id
+        //         const id = object['id']
+        //         if (id) return await this.findById(id)
+        //     default:
+        // } 
     
-        // An empty search result looks like [ 0 ].
-        // First value is the number of search results
-        const noOfResults = searchResults[1];
+        // // Get query
+        // const query: string[] = []
+        // for (const key of conditions) {
+        //     let value = object[key]
+    
+        //     // Check if this is an email property
+        //     if (key == 'email') {
+        //         // Escape special characters
+        //         value = value.replace(/\./g, '\\.')
+        //             .replace(/\@/g, '\\@')
+        //             .replace(/\-/g, '\\-');
+        //     }
+    
+        //     query.push(`@${key}:{ ${value} }` )
+        // }
+
+        // Define raw query
+        let rawSearchQuery = query.join(" ")
+
+        // Return the first MAX_SEARCH_RESULTS matching documents.
+        const searchResults = await repository.searchRaw(rawSearchQuery).return.page(0, MAX_SEARCH_RESULTS)
+    
+        // Check for an empty search result
+        const noOfResults = searchResults.length;
         if (noOfResults === 0) {
             return [];
         }
     
         // Actual results look like:
-        //  [ 3, 
-        //      'hashKey', ['fieldName', 'fieldValue', ...]
-        //      'hashKey', ['fieldName, 'fieldValue', ...]
-        //  ... ]
-    
+        /** 
+        {
+            total: 3, 
+            documents: [
+                {
+                    id: 'hashKey', 
+                    value: {
+                        'fieldName': 'fieldValue'
+                        ... 
+                    }
+                },
+                {
+                    id: 'hashKey', 
+                    value: {
+                        'fieldName': 'fieldValue'
+                        ... 
+                    }
+                }
+                ... 
+            ]
+         }
+        */ 
+
         // Convert results to an array of dictionaries/objects
         const results: {}[] = [];
-        for (let n = 2; n < searchResults.length; n += 2) {
-            const result = {};
-            const fieldNamesAndValues = searchResults[n];
-    
-            for (let m = 0; m < fieldNamesAndValues.length; m += 2) {
-                const k = fieldNamesAndValues[m];
-                const v = fieldNamesAndValues[m + 1];
-                result[k] = v;
-            }
-    
-            results.push(result);
+        for (let n = 1; n < noOfResults; n += 1) {
+            const document = searchResults[n].value;
+            results.push(document);
         }
     
         return results;
 
     } catch (e) {
         // A malformed query or unknown index etc causes an exception type error.
-        console.log(`Invalid search request for index: ${index}, query: ${query}`);
+        console.log(`Invalid search request for index: ${repository}, query: ${query}`);
         console.error(e);
         return [];
     }
-};
-
-// Export functions
-module.exports = {
-    getClient: () => redis,
-    getKeyName,
-    performSearch
 };

@@ -1,3 +1,6 @@
+import { Entity, Schema, Repository } from 'redis-om'
+import { client } from "@/redis";
+
 /**
  * @swagger
  * components:
@@ -23,35 +26,26 @@
  *              userId: 410544b2-4001-4271-9855-fec4b6a6442a
  */
 
-// Get Redis functions
-const { 
-    getClient, 
-    getKeyName 
-} = require("@/redis");
+/* define Profile entity */
+export interface Profile extends Entity {
+    /* add identification for Profile */
+    name?: string,
 
-// Get Redis client
-const redis = getClient();
-
-// Define key
-const MODEL_KEY = "profiles"
-
-// Get default model
-const Model = require("@/models/Model")
-
-// Get preference model
-const { key, template } = require("@/models/Preference")
-const PREFERENCE_KEY = key
-const PREFERENCE_TEMPLATE = template
-
-// Define profile class
-class Profile extends Model {
-    constructor(keyName: string) {
-        super(keyName);
-    }
+    /* add foreign key for Profile */
+    userId?: string
 }
 
+/* create a Schema for Profile */
+export const profileSchema = new Schema<Profile>('profile', {
+    name: { type: 'string' }, 
+    userId: { type: 'string' },
+})
+
+/* define Profile repository */
+export const profileRepository = new Repository(profileSchema, client)
+
 // Create profile
-const create = async function(profileName: string, userId: string) {
+export const createProfile = async function(profileName: string, userId: string) {
     // Define object
     const profile = {
         name: profileName,
@@ -61,7 +55,6 @@ const create = async function(profileName: string, userId: string) {
     // Set object
     return await Model.prototype.create.call(this, profile)
 }
-Profile.prototype.create = create
 
 // Save preferences
 const setPreferences = async function(profileId: string, lifestyle: string, allergen: string, other?: string) {
@@ -78,7 +71,6 @@ const setPreferences = async function(profileId: string, lifestyle: string, alle
     // Save record
     return await redis.hset(key, preference)
 }
-Profile.prototype.setPreferences = setPreferences
 
 // Get preferences
 const getPreferences = async function(profileId: string) {
@@ -93,6 +85,3 @@ const getPreferences = async function(profileId: string) {
 
     return result
 }
-Profile.prototype.getPreferences = getPreferences
-
-module.exports = new Profile(MODEL_KEY)

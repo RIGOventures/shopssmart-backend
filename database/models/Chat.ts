@@ -1,3 +1,11 @@
+import { Entity, Schema, Repository } from 'redis-om'
+import { client } from "@/redis";
+
+export type Message = {
+    role: "system" | "user" | "assistant" | "data",
+    content: string
+}
+
 /**
  * @swagger
  * components:
@@ -35,86 +43,95 @@
  *              messages: [{ "role": 'assistant', "content": "Apple" }]
  */
 
-const { convertToCoreMessages } = require('ai');
+/* define Chat entity */
+export interface Chat extends Entity {
+    /* add identification for Chat */
+    title: string
+    createdAt: Date
+    updatedAt: Date
 
-// Define key
-const MODEL_KEY = "chats"
+    /* add messages for Chat */
+    messages: string[] 
 
-// Get Default model
-const Model = require("@/models/Model");
-
-// Define user class
-class Chat extends Model {
-    constructor(keyName: string) {
-        super(keyName);
-    }
+    /* add paths for Chat */
+    path?: string
+    sharePath?: string
+    
+    /* add foreign key for Chat's User */
+    userId?: string
 }
 
-// Create chat
-const create = async function(messages: [], userId: string) {
-    // Get messages
+/* create a Schema for Chat */
+export const chatSchema = new Schema<Chat>('chat', {
+    title: { type: 'string' }, 
+    createdAt: { type: 'date' }, 
+    updatedAt: { type: 'date' }, 
+    messages: { type: 'string[]' }, 
+    path: { type: 'string', indexed: false }, 
+    sharePath: { type: 'string', indexed: false }, 
+    userId: { type: 'string' },
+})
+
+/* define Chat repository */
+export const chatRepository = new Repository(chatSchema, client)
+
+import { convertToCoreMessages } from 'ai';
+
+/* create Chat */
+export const createChat = async (messages: Message[], userId: string) => {
+    // get messages
     const coreMessages = await convertToCoreMessages(messages);
     // const latestMessageContent = coreMessages[coreMessages.length - 1].content as string;
 
-    // Create title
+    // create title
     const firstMessageContent = coreMessages[0].content as string;
     const title = firstMessageContent.substring(0, 100);
 
-    // Get path
-    // const path = `/list/${chatId}`;
+    // stringify messages
+    let chatMessages = coreMessages.map(JSON.stringify);
 
-    // Create chat
+    // define path
+    // const path = `/list/${chatId}`,
+    
+    // create chat
     const chat = {
+        title,
         createdAt: new Date(),
         updatedAt: new Date(),
-        messages: JSON.stringify(coreMessages),
-        title,
+        messages: chatMessages,
         userId
     };
 
-    return await Model.prototype.create.call(this, chat)
+    // save chat
+    return await chatRepository.save(chat)
 }
-Chat.prototype.create = create
 
-// Find record(s). 
-const find = async function(object: object) {
-    const responses = await Model.prototype.find.call(this, object)
-    if (responses instanceof Array) {
-        responses.map((chat) => {
-            chat['messages'] = JSON.parse(chat['messages'])
-        });
-    } else if (typeof responses['messages'] === 'string') {
-        responses['messages'] = JSON.parse(responses['messages'])
-    }
-    return responses
+/* convert Chat */
+export const convertMessages = async (chat: Chat) => {
+    // get core messages
+    const coreMessages = await convertToCoreMessages(chat.messages);
+
+    // stringify messages
+    let messages = coreMessages.map(message => JSON.parse(message));
+    return messages
 }
-Chat.prototype.find = find
 
-// Find a record. 
-const findById = async function(id: string) {
-    const chat = await Model.prototype.findById.call(this, id)
-    // Convert messages
-    const messages = chat['messages']
-    if (messages) {
-        chat['messages'] = JSON.parse(messages)
-    }
-    return chat
+/* update one Chat */
+export const updateChat = async (chat: Chat, responseMessages: Message[]) => {
+    // append to messages
+    const messages = [...chat.messages, ...responseMessages];
+
+    // get core messages
+    const coreMessages = await convertToCoreMessages(messages);
+
+    // stringify messages
+    let chatMessages = coreMessages.map(JSON.stringify);
+
+    // save messages
+    chat.messages = chatMessages
+    // save update date
+    chat.updatedAt = new Date()
+
+    // save Chat
+    return await chatRepository.save(chat)
 }
-Chat.prototype.findById = findById
-
-// Update one record.
-const updateOne = async function(object: object, values: object) {
-    // Check messages
-    const messages = values['messages']
-    if (messages) {
-        // Convert messages
-        const coreMessages = await convertToCoreMessages(messages);
-        values['messages'] = JSON.stringify(coreMessages);
-    }
-
-    // Update record
-    return await Model.prototype.updateOne.call(this, object, values)
-}
-Chat.prototype.updateOne = updateOne
-
-module.exports = new Chat(MODEL_KEY)

@@ -2,41 +2,10 @@
 // It describes the shape of the data, and what data type each property should accept.
 import { ResultCode } from '@/utils/result'
 
-export interface User {
-    id: string
-    username?: string
-    email: string
-    password: string
-    profileId?: string
-}
-
-export interface Profile {
-    id: string
-    name: string
-    userId: string
-}
-
-export interface Preferences {
-    lifestyle: string, 
-    allergen: string, 
-    other?: string
-}
-
-export type Message = {
-    role: string,
-    content: string
-}
-
-export interface Chat {  
-    id: string
-    title: string
-    createdAt: Date
-    updatedAt: Date
-    path?: string
-    messages: Message[] // Is stored as a string!
-    sharePath?: string
-    userId: string
-}
+export * from './models/User';
+export * from './models/Profile';
+export * from './models/Preferences';
+export * from './models/Chat';
 
 export interface Session {
     userId: string,

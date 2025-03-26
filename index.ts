@@ -1,26 +1,12 @@
-// Import environment variables
-require('dotenv').config();
-
-// (Optional) Whether or not to launch Next.js in dev mode. 
-const dev = process.env.NODE_ENV !== 'production' 
-// (Optional) The port the server is running behind
-const port = parseInt(process.env.PORT || '3000', 10)
-
-const express = require('express');
-const session = require('express-session');
-const { RedisStore } = require("connect-redis")
-
-// API documentation
-const swaggerJsdoc = require("swagger-jsdoc");
-const swaggerUi = require("swagger-ui-express");
-
-const cors = require('cors');
-
-// Get Redis function
-const { getClient } = require("@/database/redis");
+import { config } from 'dotenv'
+config(); // fetch Environment variables
 
 // Get Redis client
-const redis = getClient();
+import { client } from "@/redis";
+
+// Get server services
+import express from 'express';
+import cors from 'cors';
 
 // Create server handler
 const app = express();
@@ -29,13 +15,15 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 // Initialise store.
+import { RedisStore } from "connect-redis"
 let redisStore = new RedisStore({
-    client: redis,
+    client: client,
     // prefix: getKeyName(keyPrefix), default: 'sess'
 })
 
 // Create session
-const pkg = require('@/package.json');
+import session from 'express-session';
+import * as pkg from '@/package.json';
 app.use(session({
     name: pkg.name,
     secret: process.env.AUTH_SECRET,
@@ -45,11 +33,15 @@ app.use(session({
 }));
   
 // Sets up these routes on a base '/' route
-const routes = require('./routes');
+import routes from './routes';
 app.use(
     '/', 
-    routes 
-); 
+    routes
+);
+
+
+// (Optional) The port the server is running behind
+const port = parseInt(process.env.PORT || '3000', 10)
 
 // Create Swagger definition
 // You can set every attribute except paths and swagger
@@ -81,6 +73,10 @@ const options = {
         "./database/models/*.ts"
     ],
 };
+
+// Create Swagger specification
+import swaggerJsdoc from "swagger-jsdoc";
+import swaggerUi from "swagger-ui-express";
 const swaggerSpec = swaggerJsdoc(options);
 
 // Sets up documentation route
@@ -94,8 +90,7 @@ app.use(
 app.use(function (err, req, res, next) {
     console.error(err.stack)
     next(err)
-  }
-)
+});
 
 // Handle server errors (not try-catch)
 app.use(function(err, req, res, next) {
@@ -131,10 +126,11 @@ app.get(
     },
 );
 
+// (Optional) Whether or not to launch Next.js in dev mode. 
+const dev = process.env.NODE_ENV !== 'production' 
+
 // Listen on server
 app.listen(port, () => {
     // Log ready
-    console.log(
-        `> Started ${dev ? 'development' : process.env.NODE_ENV} server on http://localhost:${port}`
-    )
+    console.log(`Started ${dev ? 'development' : process.env.NODE_ENV} server on http://localhost:${port}`)
 })

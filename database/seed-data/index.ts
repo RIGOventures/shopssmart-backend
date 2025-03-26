@@ -1,58 +1,59 @@
-// Import environment variables
-require('dotenv').config();
+import { config } from 'dotenv'
+config(); // fetch Environment variables
 
-// Get Redis client
-const  { getClient } = require("@/redis");
-const redis = getClient();
+// get file service
+import * as fs from 'fs';
 
-// Get User model
-const User = require("@/models/User");
+// get User repository
+import { createUsers, userRepository } from '@/types'
 
+/* define process usage */
 const usage = () => {
     console.error('Usage: pnpm run seed users|all');
     process.exit(0);
 };
 
-const loadUsers = async () => {
-    console.log('Loading user data...');
-    /* eslint-disable global-require */
-    const usersJSON = require('./users.json');
-    /* eslint-enable */
+// get directory name
+import path from 'path';
+import { fileURLToPath } from 'url';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-    const errorCount = await User.createMany(usersJSON.users);
+/* load Users from file */
+const loadUsers = async () => {
+    // load User data
+    console.log('Loading User data...');
+    const usersJSON = JSON.parse(fs.readFileSync(`${__dirname}/users.json`, 'utf-8'))
+
+    // save User data
+    let errorCount = await createUsers(usersJSON)
     console.log(`User data loaded with ${errorCount} errors.`);
 };
 
+/* create indexes for each repository */
 const createIndexes = async () => {
+    // dropping indexes
     console.log('Dropping any existing indexes, creating new indexes...');
 
-    const dropResponse = await User.dropSearchIndex()
-    if (dropResponse === 'OK') {
-        console.log('Created indexes.');
-    } else {
-        console.log('Unexpected error creating indexes :(');
-        console.log(dropResponse);
-    } 
+    // drop the index for User
+    await userRepository.dropIndex()
 
+    // creating indexes
     console.log('Creating new indexes...');
 
-    const response = await User.createSearchIndex()
-    if (response === 'OK') {
-        console.log('Created indexes.');
-    } else {
-        console.log('Unexpected error creating indexes :(');
-        console.log(response);
-    } 
+    // create the index for User
+    await userRepository.createIndex()
+    console.log('Created User indexes.');
 };
 
-export default async function seed(params) {
-    //console.log(params)
+export const seed = async (params) => {
+    // check usage
     if (params.length !== 4) {
         usage();
     }
 
+    // run command
     const command = params[3];
-
     switch (command) {
         case 'users':
             await loadUsers();
@@ -64,8 +65,6 @@ export default async function seed(params) {
         default:
             usage();
     }
-
-    redis.quit();
 };
 
 seed(process.argv);

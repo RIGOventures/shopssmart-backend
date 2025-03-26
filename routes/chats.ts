@@ -5,32 +5,24 @@
  *  description: Chat administration
  */
 
-const router = require('express').Router();
-const { header, body, param } = require('express-validator');
+import express from 'express';
+const router = express.Router(); // create router
 
-// Types
-const { ResultCode } = require('@/utils/result')
+import { header, body, param } from 'express-validator';
 
-const { pipeline } = require("node:stream/promises");
+import { ResultCode } from '@/utils/result';
 
-// Get authentication middleware
-const isAuthenticated = require('@/utils/validation/check-session'); 
-// Get rate limit middleware
-const rateLimit = require('@/utils/validation/rate-limit');
-// Get error report middleware
-const { reportValidationError, ResultError } = require('@/utils/validation/report-validation-error'); 
+import { pipeline } from "node:stream/promises";
 
-// Get User model
-const User = require("@/models/User");
-// Get Chat model
-const Chat = require("@/models/Chat");
+import { isAuthenticated, rateLimit, reportValidationError } from '@/utils/middleware'; 
 
-// Get AI mode
-const { submitPrompt } = require("@/model/vertex");
+import { createUser, getProfile, getPreferences, userRepository, createChat, updateChat, chatRepository } from "@/database/types";
+
+import { submitPrompt } from "@/model/vertex";
 
 /**
  * @swagger
- * /chat:
+ * /message:
  *  post:
  *      summary: Get a chat response
  *      tags: [Chats]
@@ -128,7 +120,7 @@ router.post(
         const { userId } = req.session;
 
         // Create chat
-        const [result, chat] = await Chat.create(messages, userId)
+        const [result, chat] = await createChat(messages, userId)
 
         // Create chat
         await User.linkForeignRecord(userId, 'chats', chat)
@@ -318,16 +310,11 @@ router.post(
         async function onFinish({ text }: { text: string }) {
             // Get message
             const responseMessages = [ { role: 'assistant', content: text } ]
-            // Append to messages
-            const chatMessages = [...chat['messages'], ...responseMessages];
-
-            // Save chat
-            await Chat.updateOne({ id: id }, {
-                updatedAt: new Date(),
-                messages: chatMessages,      
-            })
             
-            // End stream
+            // save Chat
+            updateChat(chat, responseMessages)
+
+            // end stream
             res.end(text)
         }
 
@@ -421,10 +408,11 @@ router.put(
             return
         }
 
-        // Update chat
-        await Chat.updateOne({ id: chat.id }, {
-            sharePath: `/share/${chat.id}`,      
-        })
+        // add share path
+        chat.sharePath = `/share/${chat.id}`
+
+        // save Chat
+        await chatRepository.save(chat)
 
         // Return result
         res.status(200).json(`/share/${chat.id}`);
@@ -456,7 +444,7 @@ router.get(
     async (req, res) => {
         const { id } = req.params;
 
-        const chat = await Chat.findById(id)
+        const chat = await chatRepository.fetch(id)
         if (!chat || !chat.sharePath) {
             res.status(400).json({ resultCode: ResultCode.InvalidCredentials })
             return
@@ -467,4 +455,4 @@ router.get(
     }
 );
 
-module.exports = router;
+module.exports = router

@@ -5,21 +5,16 @@
  *  description: Profile administration
  */
 
-const router = require('express').Router();
-const { header, body, param } = require('express-validator');
+import express from 'express';
+const router = express.Router(); // create router
 
-// Types
-const { ResultCode } = require('@/utils/result')
+import { header, body, param } from 'express-validator';
 
-// Get authentication middleware
-const isAuthenticated = require('@/utils/validation/check-session'); 
-// Get error report middleware
-const { reportValidationError, ResultError } = require('@/utils/validation/report-validation-error'); 
+import { ResultCode, ResultError } from '@/utils/result'
 
-// Get User model
-const User = require("@/models/User");
-// Get Profile model
-const Profile = require("@/models/Profile");
+import { isAuthenticated, reportValidationError } from '@/utils/middleware'; 
+
+import { createUser, getProfile, getPreferences, userRepository, profileRepository } from '@/types'
 
 /**
  * @swagger
@@ -310,4 +305,4 @@ router.get(
     }
 );
 
-module.exports = router;
+module.exports = router

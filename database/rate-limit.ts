@@ -1,4 +1,4 @@
-'use server';
+import { client } from "@/redis";
 
 // Object to store the number of requests made by each user and their last request timestamp
 interface UserRequestData {
@@ -6,17 +6,13 @@ interface UserRequestData {
 	lastResetTime: number;
 }
 
-// Get Redis function
-const { getClient } = require("@/database/redis");
-
-// Get Redis client
-const redis = getClient();
-
+// define maximum number for requests
 const MAX_REQUESTS = 5
 
-async function getUserRequestData(userIP: string): Promise<UserRequestData | null> {
+/* get the User request data */
+export async function getUserRequestData(userIP: string): Promise<UserRequestData | null> {
 	try {
-		const data = await redis.get(userIP);
+		const data = await client.get(userIP);
 		return data;
 	} catch (error) {
 		console.error('Error retrieving user request data:', error);
@@ -24,24 +20,25 @@ async function getUserRequestData(userIP: string): Promise<UserRequestData | nul
 	}
 }
 
-async function setUserRequestData(userIP: string, data: UserRequestData) {
+/* set User request data */
+export async function setUserRequestData(userIP: string, data: UserRequestData) {
 	try {
-		await redis.set(userIP, data);
+		await client.set(userIP, data);
 	} catch (error) {
 		console.error('Error updating user request data:', error);
 		throw error;
 	}
 }
 
-// Middleware function to enforce rate limits
-export async function rateLimit(userIP: string) {
+/* enforce rate limit */
+export async function rateLimitUser(userIP: string) {
 	
-	// Check if the user has made requests before
+	// check if the User has made requests before
 	const userRequests = await getUserRequestData(userIP);
 	if (userRequests) {
 		const { count, lastResetTime } = userRequests;
 		
-		// Check if it's a new day and reset the count
+		// check if it's a new day and reset the count
 		const currentTime = Date.now();
 		const currentDay = new Date(currentTime).toLocaleDateString();
 		const lastResetDay = new Date(lastResetTime).toLocaleDateString();
@@ -54,15 +51,15 @@ export async function rateLimit(userIP: string) {
 			return;
 		}
 
-		// Check if the user has exceeded the rate limit (5 requests per day)
+		// check if the User has exceeded the rate limit (5 requests per day)
 		if (count >= MAX_REQUESTS) return true
 
-		// Increment the request count for the user
+		// increment the request count for the user
 		userRequests.count++;
 		await setUserRequestData(userIP, userRequests);
 
 	} else {
-		// Create a new user entry with initial request count and timestamp
+		// create a new User entry with initial request count and timestamp
 		const newUserRequests: UserRequestData = {
 			count: 1,
 			lastResetTime: Date.now()

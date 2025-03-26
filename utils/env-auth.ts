@@ -1,5 +1,3 @@
-'use server'
-
 const keysRequired = [
     'GOOGLE_VERTEX_PROJECT',
     'GOOGLE_VERTEX_LOCATION',

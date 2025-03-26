@@ -1,3 +1,4 @@
+/* define result codes */
 export enum ResultCode {
     InvalidCredentials  = 'INVALID_CREDENTIALS',
     InvalidSubmission   = 'INVALID_SUBMISSION',
@@ -19,7 +20,19 @@ export enum ResultCode {
     ChatUpdated         = 'CHAT_UPDATED',
 }
   
-export const getMessageFromCode = (resultCode: string) => {
+/* define container for result codes */
+export class ResultError extends Error {
+    resultCode?: ResultCode
+
+    /* define constructor */
+    constructor(message: string, resultCode?: ResultCode) {
+        super(message)
+        this.resultCode = resultCode
+    }
+}
+
+/* get message for result */
+export const getMessageFromCode = (resultCode: ResultCode) => {
     switch (resultCode) {
         case ResultCode.InvalidCredentials:
             return 'Invalid credentials!'

@@ -1,16 +1,14 @@
-{
-    "users": [
-        {
-        	"id": "4cd60ef1-606a-4cc2-a658-e832b962690c",
-            "username": "Admin",
-        	"email": "admin@smart-shop.com",
-		    "password": "admin123"
-        },
-        {
-            "id": "410544b2-4001-4271-9855-fec4b6a6442a",
-            "username": "Offad",
-            "email": "offad@shopssmart.com",
-            "password": "tinka123"
-        }
-    ]
-}
+[
+    {
+        "id": "4cd60ef1-606a-4cc2-a658-e832b962690c",
+        "username": "Admin",
+        "email": "admin@smart-shop.com",
+        "password": "admin123"
+    },
+    {
+        "id": "410544b2-4001-4271-9855-fec4b6a6442a",
+        "username": "Offad",
+        "email": "offad@shopssmart.com",
+        "password": "tinka123"
+    }
+]

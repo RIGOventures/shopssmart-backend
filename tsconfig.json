@@ -1,19 +1,23 @@
 {
     "compilerOptions": {
+        "target": "esnext",
+        "module": "esnext",
         "moduleDetection": "force",
+		"moduleResolution": "node",
         "noImplicitAny": false,
         "strictNullChecks": true,
+		"resolveJsonModule": true,
+		"allowSyntheticDefaultImports": true,
+		"baseUrl": ".", // This must be specified if "paths" is.
         "paths": {
 			"@/*": ["./*", "./database/*"]
 		}
     },
-	"ts-node": {
-		"require": ["tsconfig-paths/register"]
-	},
     "include": [
 		"**/*.ts", 
 		"**/*.tsx", 
-		".next/types/**/*.ts"
+		".next/types/**/*.ts", 
+		"database/seed-data/index.ts"	
 	],
   	"exclude": ["node_modules"]
 }

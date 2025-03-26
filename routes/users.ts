@@ -5,22 +5,19 @@
  *  description: User administration
  */
 
-const router = require('express').Router();
-const { body, param } = require('express-validator');
+import express from 'express';
+const router = express.Router(); // create router
 
-// Types
-const { ResultCode } = require('@/utils/result')
+import { body, param } from 'express-validator';
 
-// Sensitive fields
+import { ResultCode, ResultError } from '@/utils/result';
+
+import { reportValidationError } from '@/utils/middleware'; 
+
+import { createUser, getProfile, getPreferences, userRepository, profileRepository } from "@/database/types";
+
+// define sensitive User fields
 const SENSITIVE_FIELD_NAMES = ['password'];
-
-// Get validators
-const { reportValidationError, ResultError } = require('@/utils/validation/report-validation-error'); // Get error report middleware
-
-// Get User model
-const User = require("@/models/User");
-// Get Profile model
-const Profile = require("@/models/Profile");
 
 /**
  * @swagger
@@ -53,7 +50,11 @@ router.post(
             .isEmail()
             .trim()
             .custom(async value => {
-                const results = await User.find({ email: value })
+                // find all Users that match this email
+                const results = await userRepository.search()
+                    .where('email').equals(value)
+
+                // check if this email was found
                 if (results.length >= 1) {
                     throw new ResultError('E-mail already in use', ResultCode.UserAlreadyExists);
                 }
@@ -65,14 +66,13 @@ router.post(
         reportValidationError,
     ],
     async (req, res) => {
-        // Get body
         const { email, password } = req.body;
     
-        // Create user
-        await User.create(email, password)
+        // create User
+        await createUser(email, password)
     
-        // Return success
-        return res.status(201).json({ resultCode: ResultCode.UserCreated })
+        // return success
+        res.status(201).json({ resultCode: ResultCode.UserCreated })
     }
 );
 
@@ -97,14 +97,14 @@ router.get(
         reportValidationError,
     ],
     async (req, res) => {
-        // Get users
-        const results = await User.find()
+        // get Users
+        const results = await userRepository.search().return.all()
 
-        // Remove sensitive fields
+        // remove sensitive fields
         SENSITIVE_FIELD_NAMES.map((fieldName) =>
             results.forEach(function(existingUser){ delete existingUser[fieldName] }));
 
-        // Return filtered user
+        // return filtered User
         res.status(200).json(results);
     }
 );
@@ -150,9 +150,12 @@ router.get(
     async (req, res) => {
         const { id } = req.params;
         
-        // Find user
-        const existingUser = await User.findById(id)
-        if (!existingUser) {
+        // find User
+        const existingUser = await userRepository.fetch(id)
+
+        // check User exists
+        let noOfUserKeys = Object.keys(existingUser).length
+        if (noOfUserKeys < 1) {
             res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
             return
         }
@@ -193,14 +196,10 @@ router.delete(
     async (req, res) => {
         const { id } = req.params;
         
-        // Delete user
-        const result = await User.deleteOne({ id: id })
-        if (result == 0){
-            res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
-            return
-        }
+        // delete User
+        await userRepository.remove(id)
         
-        // Return result
+        // return result
         res.status(200).json({ resultCode: ResultCode.UserUpdated });
     }
 );
@@ -236,11 +235,18 @@ router.put(
         param('id')
             .isString()
             .isLength({ min: 1 })
-            .custom(async value => {
-                const results = User.findById(value)
-                if (results.length == 0) {
+            .custom(async (value, { req }) => {
+                // fetch User with id
+                const existingUser = userRepository.fetch(value)
+
+                // check User exists
+                let noOfUserKeys = Object.keys(existingUser).length
+                if (noOfUserKeys < 1) {
                     throw new ResultError(`Failed login attempt for ${value}.`, ResultCode.InvalidCredentials);
                 }
+                
+                // add User to request
+                req.boy.user = existingUser
             }),
         body().isObject(),
         body('profileId')
@@ -250,19 +256,25 @@ router.put(
     ],
     async (req, res) => {
         const { id } = req.params;
-        const { profileId } = req.body;
+        const { user, profileId } = req.body;
 
-        // Get profile (to ensure it exists)
-        const profile = await Profile.findById(profileId)
-        if (!profile) {
+        // fetch Profile with id
+        const existingProfile = profileRepository.fetch(profileId)
+
+        // check Profile exists
+        let noOfUserKeys = Object.keys(existingProfile).length
+        if (noOfUserKeys < 1) {
             res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
             return
         }
 
-        // Update user
-        await User.updateOne({ id: id }, { profileId: profile.id })
+        // update User with Profile id
+        user.profileId = profileId
 
-        // Return result
+        // save User
+        await userRepository.save(user)
+
+        // return result
         res.status(200).json({ resultCode: ResultCode.UserUpdated });
     }
 );
@@ -297,16 +309,20 @@ router.get(
     async (req, res) => {
         const { id } = req.params;
 
-        // Find user
-        const existingUser = await User.findById(id)
-        if (!existingUser) {
+        // fetch User with id
+        const existingUser = await userRepository.fetch(id)
+
+        // check User exists
+        let noOfUserKeys = Object.keys(existingUser).length
+        if (noOfUserKeys < 1) {
             res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
             return
         }
 
-        // Get profile
-        const profile = await User.getProfile(existingUser)
-        // Return profile
+        // get Profile
+        const profile = await getProfile(existingUser)
+
+        // return Profile
         res.status(200).json(profile);
     }
 );
@@ -344,16 +360,20 @@ router.get(
     async (req, res) => {
         const { id } = req.params;
 
-        // Find user
-        const existingUser = await User.findById(id)
-        if (!existingUser) {
+        // fetch User with id
+        const existingUser = await userRepository.fetch(id)
+
+        // check User exists
+        let noOfUserKeys = Object.keys(existingUser).length
+        if (noOfUserKeys < 1) {
             res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
             return
         }
 
-        // Get preferences
-        const preferences = await User.getPreferences(existingUser)
-        // Return preferences
+        // get Preferences
+        const preferences = await getPreferences(existingUser)
+
+        // return Preferences
         res.status(200).json(preferences);
     }
 );
@@ -399,11 +419,14 @@ router.get(
         reportValidationError,
     ],
     async (req, res) => {
-        // Get parameters
         const { email } = req.params;
 
-        // Get user
-        const existingUser = await User.findOne({ email: email })
+        // find all Users that match this email
+        const results = await userRepository.search()
+            .where('email').equals(email)
+
+        // get User
+        const existingUser = results[1]
         if (!existingUser) {
             res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
             return
@@ -417,4 +440,4 @@ router.get(
     },
 );
 
-module.exports = router;
+module.exports = router
