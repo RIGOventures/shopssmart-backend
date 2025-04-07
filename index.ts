@@ -59,9 +59,11 @@ const swaggerDefinition = {
             email: "info@email.com",
         },
     },
-    host: `localhost:${port}`, // Host (optional)
     basePath: '/', // Base path (optional)
-    servers: [{ url: `http://localhost:${port}` }],
+    servers: [
+        { url: `http://localhost:${port}` },
+        { url: `https://shopssmart-backend.onrender.com` }
+    ],
 };
 
 // Initialize swagger-jsdoc -> returns validated swagger spec in json format

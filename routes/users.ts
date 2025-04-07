@@ -55,7 +55,8 @@ router.post(
                     .where('email').equals(value)
 
                 // check if this email was found
-                if (results.length >= 1) {
+                let noOfResults = await results.count
+                if (noOfResults >= 1) {
                     throw new ResultError('E-mail already in use', ResultCode.UserAlreadyExists);
                 }
             }),
