@@ -38,7 +38,7 @@ FROM base
 COPY --from=build /app /app
 
 # Seed the database
-RUN pnpm run seed
+RUN pnpm run seed all
 
 # Start the server by default, this can be overwritten at runtime
 EXPOSE 3000
