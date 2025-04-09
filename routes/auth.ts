@@ -30,11 +30,9 @@ import { body, param } from 'express-validator';
  */
 
 import { ResultCode, ResultError } from '@/utils/result';
-
 import { reportValidationError } from '@/utils/middleware'; 
 
 import { EntityId } from "redis-om";
-
 import { createUser, validatePassword, userRepository } from "@/database/types";
 
 /**
@@ -72,7 +70,8 @@ router.post(
                     .where('email').equals(value)
 
                 // check if this email was found
-                if (results.length >= 1) {
+                let noOfResults = await results.count()
+                if (noOfResults >= 1) {
                     throw new ResultError(`E-mail ${value} already in use`, ResultCode.UserAlreadyExists);
                 }
             }),
@@ -83,14 +82,21 @@ router.post(
         reportValidationError,
     ],
     async (req, res) => {
-        // Get body
         const { email, password } = req.body;
     
-        // Create user
-        await createUser(email, password)
-    
-        // Return success
-        return res.status(201).json({ resultCode: ResultCode.UserCreated })
+        // create User
+        let user = await createUser(email, password)
+
+        // check User created
+        let noOfUserKeys = Object.keys(user).length
+        if (noOfUserKeys == 0) {
+            // return success
+            res.status(201).json({ resultCode: ResultCode.UserCreated })
+            return 
+        }
+
+        // return fail
+        res.status(500).json({ resultCode: ResultCode.UnknownError })
     }
 );
 
@@ -131,12 +137,16 @@ router.post(
                     .where('email').equals(value)
 
                 // check if this email was found
-                if (results.length == 0) {
+                let noOfResults = await results.count()
+                if (noOfResults == 0) {
                     throw new ResultError(`Failed login attempt for ${value}.`, ResultCode.InvalidCredentials);
                 }
 
+                // TODO: Get specific field from a hash.
+                // Check out the HMGET command... https://redis.io/commands/hmget
+
                 // add User to request
-                req.body.user = results[1]
+                req.body.user = await results.first()
             }),
         body('password')
             .isString()
@@ -146,9 +156,6 @@ router.post(
     ],
     async (req, res) => {
         const { email, password, user } = req.body;
-
-        // TODO: Get specific field from a hash.
-        // Check out the HMGET command... https://redis.io/commands/hmget
 
         // check if the correct password was provided...
         const passwordCorrect = await validatePassword(user, password);

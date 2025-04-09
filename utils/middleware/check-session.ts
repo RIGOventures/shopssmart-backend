@@ -1,5 +1,5 @@
 /* test if Session is available and authenticated */
-export default function isAuthenticated (req, res, next) {
+export default function isAuthenticated (value, { req }) {
     // check Session is available
     if (!req.session) {
         throw new Error("Session is not authenticated")
@@ -9,6 +9,7 @@ export default function isAuthenticated (req, res, next) {
     if (!req.session.userId) {
         throw new Error("Session is invalid")
     }
-        
-    return next()
+    
+    // return success
+    return true
 }

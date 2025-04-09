@@ -1,5 +1,5 @@
 import { createClient } from 'redis'
-import { Repository } from 'redis-om'
+import { Entity, EntityId, Repository } from 'redis-om'
 
 // Define params
 let port = Number(process.env.REDIS_PORT || 6379)
@@ -115,3 +115,68 @@ export const performSearch = async (repository: Repository, ...query: string[]) 
         return [];
     }
 };
+
+/* insert into a sorted set */
+export const insertSortedRecord = async function(index: string, entityId: string, record: Entity) {
+    // define set key
+    const setKey = getKeyName(index, entityId)
+
+    // get the primary key
+    const primaryKey = record[EntityId]
+    if (primaryKey) {
+        // add to the sorted set
+        await client.zAdd(setKey, { score: Date.now(), value: primaryKey })
+    }
+}
+
+/* delete from a sorted set */
+export const deleteSortedRecord = async (index: string, entityId: string, record: Entity) => {
+    // define set key
+    const setKey = getKeyName(index, entityId)
+    
+    // get the primary key
+    const primaryKey = record[EntityId]
+    if (primaryKey) {
+        // remove from the sorted set
+        await client.zRem(setKey, primaryKey)
+    }
+}
+
+/* get a sorted set */
+export const getSortedSet = async function(index: string, entityId: string, repository: Repository) {
+    // define set key
+    const setKey = getKeyName(index, entityId)
+
+    // get set in reverse order
+    const records: string[] = await client.zRange(setKey, '+inf', '-inf', { BY: 'SCORE', REV: true })
+
+    // get all records saved
+    const results = await Promise.all(
+        records.map(async (recordId) => {
+            return repository.fetch(recordId)
+        }))
+
+    // flatten and filter results
+    const filtered = results.flat().filter(function (record) { 
+        // check result exists
+        let noOfUserKeys = Object.keys(record).length
+        return noOfUserKeys > 0
+    })
+    return filtered
+}
+
+// Delete foreign records
+export const deleteSortedSet = async function(index: string, entityId: string, repository: Repository) {
+    // define set key
+    const setKey = getKeyName(index, entityId)
+
+    // get set in reverse order
+    const records: string[] = await client.zRange(setKey, '+inf', '-inf', { BY: 'SCORE', REV: true })
+
+    // get all records saved
+    await Promise.all(
+        records.map(async (recordId) => {
+            repository.remove(recordId)
+            client.zRem(setKey, recordId)
+        }))
+}

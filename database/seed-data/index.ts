@@ -58,6 +58,8 @@ export const seed = async (params) => {
         case 'users':
             await loadUsers();
             break;
+        case 'indexes':
+            await createIndexes();
         case 'all':
             await loadUsers();
             await createIndexes();

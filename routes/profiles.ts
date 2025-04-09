@@ -1,3 +1,5 @@
+import _ from 'lodash'
+
 /**
  * @swagger
  * tags:
@@ -9,12 +11,6 @@ import express from 'express';
 const router = express.Router(); // create router
 
 import { header, body, param } from 'express-validator';
-
-import { ResultCode, ResultError } from '@/utils/result'
-
-import { isAuthenticated, reportValidationError } from '@/utils/middleware'; 
-
-import { createUser, getProfile, getPreferences, userRepository, profileRepository } from '@/types'
 
 /**
  * @swagger
@@ -28,6 +24,32 @@ import { createUser, getProfile, getPreferences, userRepository, profileReposito
  *      example:
  *          profileName: Family Dinner
  */
+
+/**
+ * @swagger
+ * definitions:
+ *  CreatePreferences:
+ *      properties:
+ *          lifestyle: 
+ *              type: string
+ *          allergen:
+ *              type: string
+ *          other:
+ *              type: string
+ *      example:
+ *          lifestyle: Diabetes
+ *          allergen: Nuts
+ *          other: N/A
+ */
+
+import { ResultCode, ResultError } from '@/utils/result'
+import { isAuthenticated, reportValidationError } from '@/utils/middleware'; 
+
+import { createProfile, userSchema, profileRepository } from '@/types'
+import { getKeyName, insertSortedRecord, deleteSortedRecord, getSortedSet } from '@/database/redis';
+
+/* define User Profile set key */
+const USER_PROFILE_SET_KEY = getKeyName(userSchema.schemaName, 'profiles')
 
 /**
  * @swagger
@@ -66,17 +88,25 @@ router.post(
     async (req, res) => {
         const { profileName } = req.body;
 
-        // Get session
+        // get Session
         const { userId } = req.session;
 
-        // Create profile
-        const [result, profile] = await Profile.create(profileName, userId)
+        // create Profile
+        let profile = await createProfile(profileName, userId)
 
-        // Link profile
-        await User.linkForeignRecord(userId, 'profiles', profile)
+        // check Profile created
+        let noOfUserKeys = Object.keys(profile).length
+        if (noOfUserKeys == 0) {
+            // return fail
+            res.status(500).json({ resultCode: ResultCode.UnknownError })
+            return 
+        }
 
-        // Return result
-        res.status(201).json(profile);
+        // insert Profile to a sorted set
+        await insertSortedRecord(USER_PROFILE_SET_KEY, userId, profile)
+
+        // return success
+        res.status(201).json({ resultCode: ResultCode.ProfileCreated });
     }
 );
 
@@ -103,13 +133,13 @@ router.get(
         reportValidationError,
     ],
     async (req, res) => {
-        // Get session
+        // get Session
         const { userId } = req.session;
 
-        // Get profiles
-        const profiles = await User.getForeignRecords(userId, 'profiles')
+        // get Profiles
+        const profiles = await getSortedSet(USER_PROFILE_SET_KEY, userId, profileRepository)
 
-        // Return result
+        // return result
         res.status(200).json(profiles);
     }
 );
@@ -151,23 +181,36 @@ router.get(
             .custom(isAuthenticated),
         param('id')
             .isString()
-            .isLength({ min: 1 }),
+            .isLength({ min: 1 })
+            .custom(async (value, { req }) => {
+                // fetch Profile with id
+                const existingProfile = await profileRepository.fetch(value)
+
+                // check Profile exists
+                let noOfUserKeys = Object.keys(existingProfile).length
+                if (noOfUserKeys == 0) {
+                    throw new ResultError(`Profile ${value} does not exist.`, ResultCode.InvalidCredentials);
+                }
+
+                // add Profile to request
+                req.body.profile = existingProfile
+            }),
         reportValidationError,
     ],
     async (req, res) => {
-        const { id } = req.params;
+        const { profile } = req.body;
 
-        // Get session
+        // get Session
         const { userId } = req.session;
 
-        // Get record
-        const profile = await User.getForeignRecord(userId, 'profiles', id)
-        if (!profile) {
-            res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
+        // Compare with session.userId
+        if (profile.userId != userId) {
+            // return fail
+            res.status(400).json({ resultCode: ResultCode.InvalidCredentials })
             return
         }
-            
-        // Return result
+
+        // return result
         res.status(200).json(profile);
     }
 );
@@ -196,24 +239,44 @@ router.delete(
             .custom(isAuthenticated),
         param('id')
             .isString()
-            .isLength({ min: 1 }),
+            .isLength({ min: 1 })
+            .custom(async (value, { req }) => {
+                // fetch Profile with id
+                const existingProfile = await profileRepository.fetch(value)
+
+                // check Profile exists
+                let noOfUserKeys = Object.keys(existingProfile).length
+                if (noOfUserKeys == 0) {
+                    throw new ResultError(`Profile ${value} does not exist.`, ResultCode.InvalidCredentials);
+                }
+
+                // add Profile to request
+                req.body.profile = existingProfile
+            }),
         reportValidationError,
     ],
     async (req, res) => {
         const { id } = req.params;
+        const { profile } = req.body;
 
-        // Get session
+        // get Session
         const { userId } = req.session;
 
-        // Delete record
-        const result = await User.deleteForeignRecord(userId, 'profiles', id)
-        if (result == 0){
-            res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
+        // Compare with session.userId
+        if (profile.userId != userId) {
+            // return fail
+            res.status(400).json({ resultCode: ResultCode.InvalidCredentials })
             return
         }
 
-        // Return result
-        res.send("OK");
+        // delete Profile from sorted set
+        await deleteSortedRecord(USER_PROFILE_SET_KEY, userId, profile)
+
+        // delete Profile
+        await profileRepository.remove(id)
+
+        // return result
+        res.status(200).json({ resultCode: ResultCode.ProfileUpdated });
     }
 );
 
@@ -225,6 +288,13 @@ router.delete(
  *      tags: [Profiles]
  *      parameters:
  *          - $ref: '#/parameters/profileId'
+*      requestBody:
+ *          required: true
+ *          content:
+ *              application/json:
+ *                  schema:
+ *                      type: object
+ *                      $ref: '#/definitions/CreatePreferences'
  *      responses:
  *          200:
  *              description: The response code
@@ -239,7 +309,20 @@ router.put(
     [
         param('id')
             .isString()
-            .isLength({ min: 1 }),
+            .isLength({ min: 1 })
+            .custom(async (value, { req }) => {
+                // fetch Profile with id
+                const existingProfile = await profileRepository.fetch(value)
+
+                // check Profile exists
+                let noOfUserKeys = Object.keys(existingProfile).length
+                if (noOfUserKeys == 0) {
+                    throw new ResultError(`Profile ${value} does not exist.`, ResultCode.InvalidCredentials);
+                }
+
+                // add Profile to request
+                req.body.profile = existingProfile
+            }),
         body().isObject(),
         body('lifestyle') // TODO: Check as enum
             .isString(), 
@@ -250,17 +333,28 @@ router.put(
         reportValidationError,
     ],
     async (req, res) => {
-        const { id } = req.params;
-        const { lifestyle, allergen, other } = req.body;
+        const { profile, lifestyle, allergen, other } = req.body;
 
-        // Link preference
-        const result = await Profile.setPreferences(id, lifestyle, allergen, other)
-        if (result == 0){
+        // create Preferences
+        const preferences = {
+            lifestyle, 
+            allergen, 
+            other
+        }
+
+        // add preferences to Profile
+        profile.preferences = preferences
+
+        // save Profile
+        let savedProfile = await profileRepository.save(profile)
+        
+        // check Preferences
+        if (!_.isEqual(savedProfile.preferences, preferences)) {
             res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
             return
         }
 
-        // Return result
+        // return result
         res.status(200).json({ resultCode: ResultCode.ProfileUpdated });
     }
 );
@@ -287,21 +381,27 @@ router.get(
     [
         param('id')
             .isString()
-            .isLength({ min: 1 }),
+            .isLength({ min: 1 })
+            .custom(async (value, { req }) => {
+                // fetch Profile with id
+                const existingProfile = await profileRepository.fetch(value)
+
+                // check Profile exists
+                let noOfUserKeys = Object.keys(existingProfile).length
+                if (noOfUserKeys == 0) {
+                    throw new ResultError(`Profile ${value} does not exist.`, ResultCode.InvalidCredentials);
+                }
+
+                // add Profile to request
+                req.body.profile = existingProfile
+            }),
         reportValidationError,
     ],
     async (req, res) => {
-        const { id } = req.params;
-        
-        // Get preference
-        const preferences = await Profile.getPreferences(id)
-        if (!preferences){
-            res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
-            return
-        }
+        const { profile } = req.body;
 
-        // Return result
-        res.status(200).json(preferences);
+        // return result
+        res.status(200).json(profile.preferences);
     }
 );
 

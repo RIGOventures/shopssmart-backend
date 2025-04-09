@@ -1,3 +1,5 @@
+import _ from 'lodash'
+
 import { Entity, Schema, Repository } from 'redis-om'
 import { client } from "@/redis";
 
@@ -107,13 +109,22 @@ export const createChat = async (messages: Message[], userId: string) => {
 }
 
 /* convert Chat */
-export const convertMessages = async (chat: Chat) => {
+const convertMessages = async (messages: string[]) => {
+    // parse messages
+    let parsedMessages = messages.map(message => {
+        if (_.isString(message)) return JSON.parse(message)
+        return message
+    });
+ 
     // get core messages
-    const coreMessages = await convertToCoreMessages(chat.messages);
+    const coreMessages = await convertToCoreMessages(parsedMessages)
+    return coreMessages
+}
 
-    // stringify messages
-    let messages = coreMessages.map(message => JSON.parse(message));
-    return messages
+/* convert Chat */
+export const convertChat = async (chat: Chat) => {
+    // change messages
+    chat.messages = await convertMessages(chat.messages);
 }
 
 /* update one Chat */
@@ -122,7 +133,7 @@ export const updateChat = async (chat: Chat, responseMessages: Message[]) => {
     const messages = [...chat.messages, ...responseMessages];
 
     // get core messages
-    const coreMessages = await convertToCoreMessages(messages);
+    const coreMessages = await convertMessages(messages);
 
     // stringify messages
     let chatMessages = coreMessages.map(JSON.stringify);

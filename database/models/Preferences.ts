@@ -21,9 +21,9 @@ import { client } from "@/redis";
  *                  type: string
  *                  description: Some other preference
  *          example:
- *              id: 7d7a9092-666b-4a84-8aad-294d15a306f6
- *              name: Femi
- *              userId: 410544b2-4001-4271-9855-fec4b6a6442a
+ *              lifestyle: Keto
+ *              allergen: Nuts
+ *              other: I like Icecream
  */
 
 /* define Preferences entity */
@@ -34,18 +34,8 @@ export interface Preferences extends Entity {
     other?: string
 }
 
-/* create a Schema for Preferences */
-export const preferencesSchema = new Schema<Preferences>('preferences', {
-    lifestyle: { type: 'string' }, 
-    allergen: { type: 'string' }, 
-    other: { type: 'string' },
-})
-
-/* define Preferences repository */
-export const preferencesRepository = new Repository(preferencesSchema, client)
-
-// Define default preferences
-const DEFAULT = {
+/* define default Preferences */
+export const PREFERENCE_TEMPLATE = {
     lifestyle: "", 
     allergen: "", 
     other: "",  

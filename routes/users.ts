@@ -11,10 +11,10 @@ const router = express.Router(); // create router
 import { body, param } from 'express-validator';
 
 import { ResultCode, ResultError } from '@/utils/result';
-
 import { reportValidationError } from '@/utils/middleware'; 
 
-import { createUser, getProfile, getPreferences, userRepository, profileRepository } from "@/database/types";
+import { EntityId } from "redis-om";
+import { createUser, getProfile, userRepository, profileRepository } from "@/database/types";
 
 // define sensitive User fields
 const SENSITIVE_FIELD_NAMES = ['password'];
@@ -70,10 +70,18 @@ router.post(
         const { email, password } = req.body;
     
         // create User
-        await createUser(email, password)
+        let user = await createUser(email, password)
+
+        // check User created
+        let noOfUserKeys = Object.keys(user).length
+        if (noOfUserKeys == 0) {
+            // return success
+            res.status(201).json({ resultCode: ResultCode.UserCreated })
+            return 
+        }
     
-        // return success
-        res.status(201).json({ resultCode: ResultCode.UserCreated })
+        // return fail
+        res.status(500).json({ resultCode: ResultCode.UnknownError })
     }
 );
 
@@ -145,27 +153,30 @@ router.get(
     [
         param('id')
             .isString()
-            .isLength({ min: 1 }),
+            .isLength({ min: 1 })
+            .custom(async (value, { req }) => {
+                // fetch User with id
+                const existingUser = await userRepository.fetch(value)
+
+                // check User exists
+                let noOfUserKeys = Object.keys(existingUser).length
+                if (noOfUserKeys == 0) {
+                    throw new ResultError(`Failed login attempt for ${value}.`, ResultCode.InvalidCredentials);
+                }
+                
+                // add User to request
+                req.body.user = existingUser
+            }),
         reportValidationError,
     ],
     async (req, res) => {
-        const { id } = req.params;
-        
-        // find User
-        const existingUser = await userRepository.fetch(id)
-
-        // check User exists
-        let noOfUserKeys = Object.keys(existingUser).length
-        if (noOfUserKeys < 1) {
-            res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
-            return
-        }
+        const { user } = req.body;
 
         // Remove sensitive fields
-        SENSITIVE_FIELD_NAMES.map((fieldName) => delete existingUser[fieldName]);
+        SENSITIVE_FIELD_NAMES.map((fieldName) => delete user[fieldName]);
 
         // Return filtered user
-        res.status(200).json(existingUser);
+        res.status(200).json(user);
     },
 );
 
@@ -238,39 +249,41 @@ router.put(
             .isLength({ min: 1 })
             .custom(async (value, { req }) => {
                 // fetch User with id
-                const existingUser = userRepository.fetch(value)
+                const existingUser = await userRepository.fetch(value)
 
                 // check User exists
                 let noOfUserKeys = Object.keys(existingUser).length
-                if (noOfUserKeys < 1) {
+                if (noOfUserKeys == 0) {
                     throw new ResultError(`Failed login attempt for ${value}.`, ResultCode.InvalidCredentials);
                 }
                 
                 // add User to request
-                req.boy.user = existingUser
+                req.body.user = existingUser
             }),
         body().isObject(),
         body('profileId')
             .isString()
-            .isLength({ min: 1 }),
+            .isLength({ min: 1 })
+            .custom(async (value, { req }) => {
+                // fetch Profile with id
+                const existingProfile = await profileRepository.fetch(value)
+
+                // check Profile exists
+                let noOfUserKeys = Object.keys(existingProfile).length
+                if (noOfUserKeys == 0) {
+                    throw new ResultError(`Profile ${value} does not exist.`, ResultCode.InvalidCredentials);
+                }
+
+                // add Profile to request
+                req.body.profile = existingProfile
+            }),
         reportValidationError,
     ],
     async (req, res) => {
-        const { id } = req.params;
-        const { user, profileId } = req.body;
-
-        // fetch Profile with id
-        const existingProfile = profileRepository.fetch(profileId)
-
-        // check Profile exists
-        let noOfUserKeys = Object.keys(existingProfile).length
-        if (noOfUserKeys < 1) {
-            res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
-            return
-        }
+        const { user, profile } = req.body;
 
         // update User with Profile id
-        user.profileId = profileId
+        user.profileId = profile[EntityId]
 
         // save User
         await userRepository.save(user)
@@ -304,24 +317,27 @@ router.get(
     [
         param('id')
             .isString()
-            .isLength({ min: 1 }),
+            .isLength({ min: 1 })
+            .custom(async (value, { req }) => {
+                // fetch User with id
+                const existingUser = await userRepository.fetch(value)
+
+                // check User exists
+                let noOfUserKeys = Object.keys(existingUser).length
+                if (noOfUserKeys == 0) {
+                    throw new ResultError(`Failed login attempt for ${value}.`, ResultCode.InvalidCredentials);
+                }
+                
+                // add User to request
+                req.body.user = existingUser
+            }),
         reportValidationError,
     ],
     async (req, res) => {
-        const { id } = req.params;
-
-        // fetch User with id
-        const existingUser = await userRepository.fetch(id)
-
-        // check User exists
-        let noOfUserKeys = Object.keys(existingUser).length
-        if (noOfUserKeys < 1) {
-            res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
-            return
-        }
+        const { user } = req.body;
 
         // get Profile
-        const profile = await getProfile(existingUser)
+        const profile = await getProfile(user)
 
         // return Profile
         res.status(200).json(profile);
@@ -355,27 +371,38 @@ router.get(
     [
         param('id')
             .isString()
-            .isLength({ min: 1 }),
+            .isLength({ min: 1 })
+            .custom(async (value, { req }) => {
+                // fetch User with id
+                const existingUser = await userRepository.fetch(value)
+
+                // check User exists
+                let noOfUserKeys = Object.keys(existingUser).length
+                if (noOfUserKeys == 0) {
+                    throw new ResultError(`Failed login attempt for ${value}.`, ResultCode.InvalidCredentials);
+                }
+                
+                // add User to request
+                req.body.user = existingUser
+            }),
         reportValidationError,
     ],
     async (req, res) => {
-        const { id } = req.params;
+        const { user } = req.body;
 
-        // fetch User with id
-        const existingUser = await userRepository.fetch(id)
+        // get Profile
+        const profile = await getProfile(user)
 
-        // check User exists
-        let noOfUserKeys = Object.keys(existingUser).length
-        if (noOfUserKeys < 1) {
-            res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
+        // check Profile exists
+        let noOfUserKeys = Object.keys(profile).length
+        if (noOfUserKeys == 0) {
+            // return fail
+            res.status(400).json({ resultCode: ResultCode.InvalidCredentials })
             return
         }
 
-        // get Preferences
-        const preferences = await getPreferences(existingUser)
-
         // return Preferences
-        res.status(200).json(preferences);
+        res.status(200).json(profile.preferences);
     }
 );
 
@@ -416,28 +443,32 @@ router.get(
     '/user/email/:email',
     [
         param('email')
-            .isEmail(),
+            .isEmail()
+            .custom(async (value, { req }) => {
+                // find all Users that match this email
+                const results = await userRepository.search()
+                    .where('email').equals(value)
+
+
+                // check if this email was found
+                let noOfResults = await results.count()
+                if (noOfResults == 0) {
+                    throw new ResultError(`Failed login attempt for ${value}.`, ResultCode.InvalidCredentials);
+                }
+
+                // add User to request
+                req.body.user = await results.first()
+            }),
         reportValidationError,
     ],
     async (req, res) => {
-        const { email } = req.params;
-
-        // find all Users that match this email
-        const results = await userRepository.search()
-            .where('email').equals(email)
-
-        // get User
-        const existingUser = results[1]
-        if (!existingUser) {
-            res.status(400).json({ resultCode: ResultCode.InvalidCredentials });
-            return
-        }
+        const { user } = req.body;
 
         // Remove sensitive fields
-        SENSITIVE_FIELD_NAMES.map((fieldName) => delete existingUser[fieldName]);
+        SENSITIVE_FIELD_NAMES.map((fieldName) => delete user[fieldName]);
 
         // Return filtered user
-        res.status(200).json(existingUser);
+        res.status(200).json(user);
     },
 );
 
