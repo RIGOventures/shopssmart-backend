@@ -12,6 +12,8 @@ import { body } from 'express-validator';
 
 import { rateLimit, reportValidationError } from '@/utils/middleware';
 
+import { createPreferences } from '@/types'
+
 import { pipeline } from "node:stream/promises";
 import { submitPrompt } from "@/model/vertex";
 
@@ -49,17 +51,17 @@ router.post(
     async (req, res) => {
         const { content } = req.body;
 
-        // Handle on finish
+        // handle onFinish
         async function onFinish({ text }: { text: string }) {
-            // End stream
+            // end stream
             res.end(text)
         }
 
-        // Submit message
+        // submit message
         const streamResponse = await submitPrompt(content, {}, onFinish)
 
-        // Pipe stream to response!
-        await pipeline(streamResponse.body, res);
+        // pipe stream to response!
+        await pipeline(streamResponse.body!, res);
     }
 )
 
@@ -102,17 +104,20 @@ router.post(
     async (req, res) => {
         const { content, preferences } = req.body;
 
-        // Handle on finish
+        // create Preferences
+        let samplePreferences = await createPreferences(preferences)
+
+        // handle onFinish
         async function onFinish({ text }: { text: string }) {
-            // End stream
+            // end stream
             res.end(text)
         }
 
-        // Submit message
-        const streamResponse = await submitPrompt(content, preferences, onFinish)
+        // submit message
+        const streamResponse = await submitPrompt(content, samplePreferences, onFinish)
 
-        // Pipe stream to response!
-        await pipeline(streamResponse.body, res);
+        // pipe stream to response!
+        await pipeline(streamResponse.body!, res);
     }
 )
 

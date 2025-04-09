@@ -45,7 +45,7 @@ import { header, body, param } from 'express-validator';
 import { ResultCode, ResultError } from '@/utils/result'
 import { isAuthenticated, reportValidationError } from '@/utils/middleware'; 
 
-import { createProfile, userSchema, profileRepository } from '@/types'
+import { createProfile, userSchema, profileRepository, createPreferences } from '@/types'
 import { getKeyName, insertSortedRecord, deleteSortedRecord, getSortedSet } from '@/database/redis';
 
 /* define User Profile set key */
@@ -336,11 +336,11 @@ router.put(
         const { profile, lifestyle, allergen, other } = req.body;
 
         // create Preferences
-        const preferences = {
+        let preferences = createPreferences({
             lifestyle, 
             allergen, 
             other
-        }
+        })
 
         // add preferences to Profile
         profile.preferences = preferences

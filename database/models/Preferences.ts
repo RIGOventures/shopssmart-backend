@@ -1,5 +1,4 @@
-import { Entity, Schema, Repository } from 'redis-om'
-import { client } from "@/redis";
+import { Entity } from 'redis-om'
 
 /**
  * @swagger
@@ -29,8 +28,8 @@ import { client } from "@/redis";
 /* define Preferences entity */
 export interface Preferences extends Entity {
     /* add aspects of Preferences */
-    lifestyle: string
-    allergen: string, 
+    lifestyle?: string
+    allergen?: string, 
     other?: string
 }
 
@@ -39,4 +38,12 @@ export const PREFERENCE_TEMPLATE = {
     lifestyle: "", 
     allergen: "", 
     other: "",  
+}
+
+/* create Preferences */
+export const createPreferences = async (preferences: Preferences) => {
+    // TODO: check the Preferences
+
+    // save Preferences
+    return preferences
 }

@@ -1,7 +1,7 @@
 import { Entity, Schema, Repository } from 'redis-om'
 import { client } from "@/redis";
 
-import { Preferences } from "@/models/Preferences";
+import { Preferences, PREFERENCE_TEMPLATE } from "@/models/Preferences";
 
 /**
  * @swagger
@@ -54,9 +54,15 @@ export const createProfile = async (name: string, userId: string) => {
     // define Profile
     const profile = {
         name: name,
-        userId,
+        userId
     }
 
     // save Profile
     return await profileRepository.save(profile)
+}
+
+/* get Preferences */
+export const getPreferences = async (profile: Profile) => {
+    if (profile.preferences) return profile.preferences
+    return PREFERENCE_TEMPLATE
 }

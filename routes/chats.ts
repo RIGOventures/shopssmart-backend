@@ -26,7 +26,7 @@ import { header, body, param } from 'express-validator';
 import { ResultCode, ResultError } from '@/utils/result';
 import { isAuthenticated, rateLimit, reportValidationError } from '@/utils/middleware'; 
 
-import { createChat, convertChat, updateChat, chatRepository, getProfile, userSchema, userRepository } from "@/database/types";
+import { createChat, convertChat, updateChat, chatRepository, Chat, ConvertChat, getPreferences, getProfile, userSchema, userRepository, Message } from "@/database/types";
 import { getKeyName, insertSortedRecord, deleteSortedRecord, getSortedSet, deleteSortedSet } from '@/database/redis';
 
 import { pipeline } from "node:stream/promises";
@@ -109,12 +109,16 @@ router.get(
         const { userId } = req.session;
 
         // get Chats
-        const chats = await getSortedSet(USER_CHAT_SET_KEY, userId, chatRepository)
+        const chats = await getSortedSet(USER_CHAT_SET_KEY, userId, chatRepository) as Chat[]
+
         // parse Chats
-        await chats.map(async chat => await convertChat(chat));
+        const convertedChats = await Promise.all(chats.map(async (chat) => { 
+            // convert Chat messages
+            return await convertChat(chat); 
+        })) as unknown as ConvertChat[]
 
         // return result
-        res.status(200).json(chats);
+        res.status(200).json(convertedChats);
     }
 );
 
@@ -304,7 +308,7 @@ router.post(
         // Handle on finish
         async function onFinish({ text }: { text: string }) {
             // Get message
-            const responseMessages = [ { role: 'assistant', content: text } ]
+            const responseMessages = [ { role: 'assistant', content: text } ] as Message[]
             
             // save Chat
             updateChat(chat, responseMessages)
@@ -315,12 +319,14 @@ router.post(
 
         // get User Profile
         const profile = await getProfile(user)
+        // get Profile Preferences
+        const preferences = await getPreferences(profile)
 
-        // Submit message
-        const streamResponse = await submitPrompt(content, profile.preferences || {}, onFinish)
+        // submit message
+        const streamResponse = await submitPrompt(content, preferences, onFinish)
 
-        // Pipe stream to response!
-        await pipeline(streamResponse.body, res);
+        // pipe stream to response!
+        await pipeline(streamResponse.body!, res);
     }
 )
 

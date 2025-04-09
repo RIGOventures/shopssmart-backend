@@ -46,14 +46,11 @@ export type Message = {
  */
 
 /* define Chat entity */
-export interface Chat extends Entity {
+export interface IChat extends Entity {
     /* add identification for Chat */
     title: string
     createdAt: Date
     updatedAt: Date
-
-    /* add messages for Chat */
-    messages: string[] 
 
     /* add paths for Chat */
     path?: string
@@ -61,6 +58,16 @@ export interface Chat extends Entity {
     
     /* add foreign key for Chat's User */
     userId?: string
+}
+
+export interface Chat extends IChat {
+    /* add messages for Chat */
+    messages: string[] 
+}
+
+export interface ConvertChat extends IChat {
+    /* redefine messages for Chat */
+    messages: Message[] 
 }
 
 /* create a Schema for Chat */
@@ -109,7 +116,7 @@ export const createChat = async (messages: Message[], userId: string) => {
 }
 
 /* convert Chat */
-const convertMessages = async (messages: string[]) => {
+const convertMessages = async (messages: (string | Message)[]) => {
     // parse messages
     let parsedMessages = messages.map(message => {
         if (_.isString(message)) return JSON.parse(message)
@@ -123,8 +130,14 @@ const convertMessages = async (messages: string[]) => {
 
 /* convert Chat */
 export const convertChat = async (chat: Chat) => {
+    // clone chat
+    let convertedChat: ConvertChat = JSON.parse(JSON.stringify(chat))
+
     // change messages
-    chat.messages = await convertMessages(chat.messages);
+    convertedChat.messages = await convertMessages(chat.messages) as Message[];
+
+    // return chat
+    return convertedChat
 }
 
 /* update one Chat */
