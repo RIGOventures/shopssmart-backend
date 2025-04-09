@@ -31,12 +31,14 @@ RUN pnpm install --frozen-lockfile
 # Copy application code
 COPY . .
 
-
 # Final stage for app image
 FROM base
 
 # Copy built application
 COPY --from=build /app /app
+
+# Seed the database
+RUN pnpm run seed
 
 # Start the server by default, this can be overwritten at runtime
 EXPOSE 3000
