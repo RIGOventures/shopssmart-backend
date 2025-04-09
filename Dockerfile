@@ -37,6 +37,10 @@ FROM base
 # Copy built application
 COPY --from=build /app /app
 
+# Add start bash script
+ADD start.sh /
+RUN chmod +x /start.sh
+
 # Start the server by default, this can be overwritten at runtime
 EXPOSE 3000
-CMD [ "pnpm", "run", "seed", "all", ";", "pnpm", "run", "start" ]
+CMD ["/start.sh"]
