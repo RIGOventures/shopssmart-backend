@@ -62,7 +62,8 @@ const swaggerDefinition = {
     basePath: '/', // Base path (optional)
     servers: [
         { url: `http://localhost:${port}` },
-        { url: `https://shopssmart-backend.onrender.com` }
+        { url: `https://shopssmart-backend.onrender.com` },
+        { url: `https://shopssmart-backend.fly.dev` }
     ],
 };
 
