@@ -6,8 +6,8 @@
 	"scripts": {
 		"dev": "nodemon",
 		"seed": "tsx database/seed-data/index.ts --",
-		"start": "SET NODE_ENV=production & tsx index.ts",
-		"test": "SET NODE_ENV=test & jest --testTimeout=10000"
+		"start": "set NODE_ENV=production & tsx index.ts",
+		"test": "set NODE_ENV=test & jest --testTimeout=10000"
 	},
 	"dependencies": {
 		"@ai-sdk/google-vertex": "^2.0.12",
