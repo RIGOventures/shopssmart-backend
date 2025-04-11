@@ -67,6 +67,9 @@ export const seed = async (params) => {
         default:
             usage();
     }
+
+    // quit with success
+    process.exit(0)
 };
 
 seed(process.argv);
